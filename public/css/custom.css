@@ -1,0 +1,25 @@
+/* Estilo para el menú principal */
+.nav-item > a {
+    display: flex;
+    align-items: center;
+    padding-left: 10px; /* Ajusta el valor según sea necesario */
+}
+
+/* Asignar un ancho fijo a los íconos para alinear el texto */
+.nav-item > a i {
+    width: 24px; /* Ajusta el valor según sea necesario */
+    text-align: center; /* Centrar los íconos dentro del espacio asignado */
+    margin-right: 10px; /* Añadir separación entre el ícono y el texto */
+}
+
+/* Estilo para los submenús */
+.nav-item .nav-treeview .nav-item > a {
+    display: flex;
+    align-items: center;
+    padding-left: 35px; /* Ajusta el valor según sea necesario */
+}
+
+/* Separación entre ícono y texto en submenús */
+.nav-item .nav-treeview .nav-item > a i {
+    margin-right: 10px; /* Ajusta el valor según sea necesario */
+}

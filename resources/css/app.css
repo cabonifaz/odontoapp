@@ -1,0 +1,24 @@
+.nav-treeview {
+    padding-left: 20px; /* Sangría para submenús */
+}
+
+.nav-treeview > li > a {
+    font-size: 14px; /* Tamaño más pequeño para submenús */
+    color: #555; /* Diferenciar el color del texto */
+    display: flex;
+    align-items: center;
+}
+
+.nav-treeview > li > a .nav-icon {
+    margin-right: 8px; /* Espaciado entre icono y texto */
+    color: #999; /* Color más tenue para iconos */
+}
+
+.nav-treeview > li > a:hover {
+    color: #007bff; /* Cambiar color al pasar el cursor */
+    background-color: #f1f1f1; /* Fondo más claro al hover */
+}
+
+.nav-item.has-treeview > a .nav-icon {
+    color: #333; /* Mantener el color del icono del menú principal */
+}
