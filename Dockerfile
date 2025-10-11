@@ -55,11 +55,11 @@ RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cac
     && chmod -R 775 storage bootstrap/cache
 
 # === Configurar puerto dinámico para Railway ===
-ENV PORT=8080
-RUN sed -i "s/80/${PORT}/g" /etc/apache2/ports.conf /etc/apache2/sites-available/000-default.conf
+# Railway define el puerto en tiempo de ejecución
+ENV PORT=${PORT:-8080}
 
-# === Exponer el puerto asignado por Railway ===
+# Exponer el puerto asignado por Railway
 EXPOSE ${PORT}
 
-# === Comando principal: iniciar Apache ===
-CMD ["apache2-foreground"]
+# === Comando principal: iniciar Apache usando el puerto dinámico ===
+CMD ["bash", "-c", "sed -i \"s/Listen .*/Listen ${PORT}/\" /etc/apache2/ports.conf && sed -i \"s/:.*/:${PORT}>/\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
