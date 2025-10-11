@@ -11,68 +11,53 @@ use Illuminate\Http\JsonResponse;
 | API Routes
 |--------------------------------------------------------------------------
 |
-| Aquí puedes registrar las rutas de la API de tu aplicación. Todas estas
-| rutas son cargadas por el RouteServiceProvider dentro del grupo "api"
-| middleware. ¡Haz algo grandioso!
+| Aquí puedes registrar las rutas de la API de tu aplicación.
 |
 */
 
-// Ruta protegida para obtener información del usuario autenticado (Laravel Sanctum)
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::get('/ping', function () {
-    return response()->json(['pong' => true], 200);
-});
 
-/*
-|--------------------------------------------------------------------------
-| Health Check
-|--------------------------------------------------------------------------
-|
-| Verifica el estado general del servidor y la conexión a la base de datos.
-| - Railway puede acceder sin token (IPs 100.64.x.x)
-| - Accesos externos requieren HEALTH_TOKEN en la query (?token=XYZ)
-|
-*/
-
+// === HEALTH CHECK CON DEBUG DETALLADO ===
 Route::get('/health', function (Request $request): JsonResponse {
-    $ip = $request->ip();
-    $token = $request->query('token');
-    $expected = env('HEALTH_TOKEN', null);
 
-    // Detectar si la IP pertenece a Railway (100.64.x.x) o localhost
-    $isRailway = str_starts_with($ip, '100.64.') || $ip === '127.0.0.1';
-
-    if ($expected && !$isRailway && $token !== $expected) {
-        return response()->json(['status' => 'unauthorized'], 401);
-    }
+    // Mostrar variables de entorno que Laravel está leyendo
+    $env = [
+        'DB_CONNECTION' => env('DB_CONNECTION'),
+        'DB_HOST'       => env('DB_HOST'),
+        'DB_PORT'       => env('DB_PORT'),
+        'DB_DATABASE'   => env('DB_DATABASE'),
+        'DB_USERNAME'   => env('DB_USERNAME'),
+        'DB_PASSWORD'   => env('DB_PASSWORD'),
+        'APP_ENV'       => env('APP_ENV'),
+        'APP_DEBUG'     => env('APP_DEBUG'),
+    ];
 
     try {
-        // Probar conexión a la base de datos
-        DB::connection()->getPdo();
+        // Forzar intento de conexión
+        $pdo = DB::connection()->getPdo();
         $status = DB::select('SELECT NOW() as current_time');
 
         return response()->json([
             'status' => 'OK',
-            'app' => config('app.name'),
-            'php_version' => phpversion(),
+            'app' => env('APP_NAME'),
+            'php_version' => PHP_VERSION,
             'laravel_version' => app()->version(),
             'database' => [
                 'connected' => true,
                 'time' => $status[0]->current_time ?? null,
-            ]
+            ],
+            'env' => $env,
         ], 200);
-
     } catch (\Exception $e) {
-        // Registrar error y devolver detalles
-        Log::error('Health Check DB connection failed: ' . $e->getMessage());
-
+        Log::error('DB Connection Failed: ' . $e->getMessage());
         return response()->json([
             'status' => 'ERROR',
             'message' => 'Database connection failed',
             'error' => $e->getMessage(),
+            'env' => $env,
         ], 500);
     }
 });
