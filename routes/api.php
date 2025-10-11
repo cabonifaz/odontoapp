@@ -38,7 +38,7 @@ Route::get('/health', function (Request $request): JsonResponse {
     try {
         // Forzar intento de conexión
         $pdo = DB::connection()->getPdo();
-        $status = DB::select('SELECT NOW() as current_time');
+        $status = DB::select('SELECT NOW() AS `current_time`');
 
         return response()->json([
             'status' => 'OK',
