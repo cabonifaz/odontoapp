@@ -13,7 +13,7 @@ ENV TZ=UTC
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Instalar dependencias
+# Instalar dependencias y PHP con TODAS las extensiones
 RUN apt-get update \
     && apt-get install -y gnupg gosu curl ca-certificates zip unzip git supervisor sqlite3 libcap2-bin libpng-dev python2 dnsutils librsvg2-bin fswatch \
     && curl -sS 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x14aa40ec0831756756d7f66c4f4ea0aae5267a6c' | gpg --dearmor | tee /etc/apt/keyrings/ppa_ondrej_php.gpg > /dev/null \
@@ -30,15 +30,25 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Copiar aplicación
-COPY . /var/www/html
+# Verificar que GD esté instalado
+RUN php -m | grep gd
 
-# Instalar dependencias de Composer
-RUN composer install --optimize-autoloader --no-dev --no-interaction
+# Copiar archivos de composer primero
+COPY composer.json composer.lock ./
+
+# Instalar dependencias de Composer (ahora GD ya está disponible)
+RUN composer install --optimize-autoloader --no-dev --no-scripts --no-interaction
+
+# Copiar el resto de la aplicación
+COPY . .
+
+# Ejecutar scripts de autoload
+RUN composer dump-autoload --optimize --no-dev
 
 # Permisos
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
 
 EXPOSE 8000
 
