@@ -1,4 +1,4 @@
-FROM php:8.3-cli
+FROM php:8.3-apache
 
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
@@ -20,29 +20,36 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 # Instalar Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Habilitar mod_rewrite de Apache
+RUN a2enmod rewrite
+
+# Configurar DocumentRoot para apuntar a public/
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+
+# Permitir .htaccess overrides
+RUN echo '<Directory /var/www/html/public>\n\
+    Options Indexes FollowSymLinks\n\
+    AllowOverride All\n\
+    Require all granted\n\
+</Directory>' > /etc/apache2/conf-available/laravel.conf \
+    && a2enconf laravel
+
 WORKDIR /var/www/html
 
-# Copiar todo
+# Copiar aplicación
 COPY . .
 
 # Instalar dependencias
 RUN composer install --optimize-autoloader --no-dev --no-interaction --ignore-platform-reqs
 
-# Crear directorios y dar permisos completos
-RUN mkdir -p storage/framework/{sessions,views,cache} \
-    storage/logs \
-    bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
+# Permisos
+RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 775 storage bootstrap/cache
 
-# Generar APP_KEY si no existe (temporal para testing)
-RUN if [ ! -f .env ]; then cp .env.example .env; fi && \
-    php artisan key:generate --no-interaction || true
+EXPOSE 80
 
-EXPOSE 8000
-
-# Healthcheck para Railway
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
-    CMD php -r "echo 'ok';" || exit 1
-
-CMD php artisan serve --host=0.0.0.0 --port=8000
+# Apache se inicia automáticamente
+CMD ["apache2-foreground"]
