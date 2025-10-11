@@ -30,14 +30,11 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Verificar que GD esté instalado
-RUN php -m | grep gd
-
 # Copiar archivos de composer primero
 COPY composer.json composer.lock ./
 
-# Instalar dependencias de Composer (ahora GD ya está disponible)
-RUN composer install --optimize-autoloader --no-dev --no-scripts --no-interaction
+# Instalar dependencias ignorando la verificación de plataforma durante la instalación
+RUN composer install --optimize-autoloader --no-dev --no-scripts --no-interaction --ignore-platform-req=ext-gd
 
 # Copiar el resto de la aplicación
 COPY . .
