@@ -86,7 +86,7 @@ return [
     'auth_logo' => [
         'enabled' => false,
         'img' => [
-            'path' => 'img/logo.png',
+            'path' => 'img/logo.jpg',
             'alt' => 'Auth Logo',
             'class' => '',
             'width' => 50,
