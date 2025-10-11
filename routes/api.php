@@ -27,24 +27,44 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 | Health Check
 |--------------------------------------------------------------------------
 |
-| Esta ruta permite verificar el estado del servidor y la conexión con la base
-| de datos. Devuelve información básica del entorno, PHP y Laravel.
-| Incluye un token opcional para restringir acceso público.
+| Verifica el estado general del servidor y la conexión a la base de datos.
+| - Railway puede acceder sin token (IPs 100.64.x.x)
+| - Accesos externos requieren HEALTH_TOKEN en la query (?token=XYZ)
 |
 */
 
 Route::get('/health', function (Request $request): JsonResponse {
+    $ip = $request->ip();
+    $token = $request->query('token');
+    $expected = env('HEALTH_TOKEN', null);
+
+    // Detectar si la IP pertenece a Railway (100.64.x.x) o localhost
+    $isRailway = str_starts_with($ip, '100.64.') || $ip === '127.0.0.1';
+
+    if ($expected && !$isRailway && $token !== $expected) {
+        return response()->json(['status' => 'unauthorized'], 401);
+    }
+
     try {
+        // Probar conexión a la base de datos
         DB::connection()->getPdo();
         $status = DB::select('SELECT NOW() as current_time');
+
         return response()->json([
             'status' => 'OK',
+            'app' => config('app.name'),
+            'php_version' => phpversion(),
+            'laravel_version' => app()->version(),
             'database' => [
                 'connected' => true,
                 'time' => $status[0]->current_time ?? null,
             ]
         ], 200);
+
     } catch (\Exception $e) {
+        // Registrar error y devolver detalles
+        Log::error('Health Check DB connection failed: ' . $e->getMessage());
+
         return response()->json([
             'status' => 'ERROR',
             'message' => 'Database connection failed',
