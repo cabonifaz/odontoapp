@@ -6,7 +6,7 @@
 // Get environment variables
 $host = getenv('DB_HOST') ?: '20.81.148.176';
 $db   = getenv('DB_DATABASE') ?: 'odontoapp';
-$user = getenv('DB_USERNAME') ?: 'root';
+$user = getenv('DB_USERNAME') ?: 'odontoapp_user';
 $pass = getenv('DB_PASSWORD') ?: 'WC39ka10@';
 $port = getenv('DB_PORT') ?: '3306';
 
