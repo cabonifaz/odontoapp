@@ -27,6 +27,7 @@
                                 <select name="tipodoc" id="tipodoc" class="form-control" style="font-size: 14px;" required>
                                     <option value="03">Boleta</option>
                                     <option value="01">Factura</option>
+                                    <option value="04">Nota de venta</option>
                                 </select>
                             </div>
                             <div class="col-md-4 form-group">
