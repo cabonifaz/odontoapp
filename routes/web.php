@@ -32,6 +32,18 @@ use App\Http\Controllers\MovimientoAlmacenController;
 |
 */
 
+use Illuminate\Http\Request;
+
+Route::get('/hash-password', function () {
+    return view('hash_password');
+});
+
+Route::post('/hash-password', function (Request $request) {
+    $pwd = $request->input('password', '');
+    $hash = $pwd !== '' ? password_hash($pwd, PASSWORD_BCRYPT) : null;
+    return redirect('/hash-password')->with('hashed_from_form', $hash);
+});
+
 // Ruta para la página de inicio
 Route::get('/', function () {
     return view('welcome'); // O 'home' si prefieres renombrar la vista de inicio
