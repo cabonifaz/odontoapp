@@ -7,8 +7,12 @@ nixPkgs = [
     "php82Extensions.gd",
     "php82Extensions.zip",
     "php82Extensions.xml",
-    "php82Extensions.curl"
+    "php82Extensions.curl",
+    "php82Extensions.fileinfo"
 ]
 
 [phases.install]
-cmds = ["composer install --optimize-autoloader --no-dev"]
+cmds = ["composer install --optimize-autoloader --no-dev --ignore-platform-req=ext-gd"]
+
+[start]
+cmd = "php artisan serve --host=0.0.0.0 --port=${PORT:-8000}"
