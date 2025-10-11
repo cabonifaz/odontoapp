@@ -34,29 +34,11 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 */
 
 Route::get('/health', function (Request $request): JsonResponse {
-    // Permitir acceso sin token desde Railway (su IP interna)
-    $ip = $request->ip();
-    $token = $request->query('token');
-    $expected = env('HEALTH_TOKEN', null);
-
-    // Lista de IPs internas de Railway
-    $railwayIps = ['100.64.0.0/10', '127.0.0.1'];
-
-    // Función para validar IP dentro del rango (simple)
-    $isRailway = str_starts_with($ip, '100.64.') || $ip === '127.0.0.1';
-
-    if ($expected && !$isRailway && $token !== $expected) {
-        return response()->json(['status' => 'unauthorized'], 401);
-    }
-
     try {
         DB::connection()->getPdo();
         $status = DB::select('SELECT NOW() as current_time');
         return response()->json([
             'status' => 'OK',
-            'app' => config('app.name'),
-            'php_version' => phpversion(),
-            'laravel_version' => app()->version(),
             'database' => [
                 'connected' => true,
                 'time' => $status[0]->current_time ?? null,
@@ -66,8 +48,7 @@ Route::get('/health', function (Request $request): JsonResponse {
         return response()->json([
             'status' => 'ERROR',
             'message' => 'Database connection failed',
-            'error' => $e->getMessage()
+            'error' => $e->getMessage(),
         ], 500);
     }
 });
-
