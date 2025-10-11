@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Agenda - Mundo System')
+@section('title', 'Agenda - Vitaldentis')
 
 <style>
     .booked {

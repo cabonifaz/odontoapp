@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Consulta de Citas - Mundo Systems')
+@section('title', 'Consulta de Citas - Vitaldentis')
 
 @section('content')
 <div class="container-fluid">

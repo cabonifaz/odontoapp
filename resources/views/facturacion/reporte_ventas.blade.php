@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Reporte de Ventas - Mundo System')
+@section('title', 'Reporte de Ventas - Vitaldentis')
 @section('content_header')
 <div class="card mb-1">
     <div class="card-header">

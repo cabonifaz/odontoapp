@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Bandeja SUNAT - Mundo System')
+@section('title', 'Bandeja SUNAT - Vitaldentis')
 @section('content_header')
 <div class="card mb-1">
     <div class="card-header">

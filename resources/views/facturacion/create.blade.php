@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Facturación - Mundo System')
+@section('title', 'Facturación - Vitaldentis')
 
 @section('content')
 <div class="container">

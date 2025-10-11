@@ -1,7 +1,7 @@
 {{-- resources/views/servivios/index.blade.php --}}
 @extends('adminlte::page')
 
-@section('title', 'Procedimientos - Mundo System')
+@section('title', 'Procedimientos - Vitaldentis')
 
 @section('content_header') 
 <div class="card mb-1">

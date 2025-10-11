@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Mundo System')
+@section('title', 'Vitaldentis')
 
 
 @section('content')

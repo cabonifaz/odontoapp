@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mundo System</title>
+    <title>Vitaldentis</title>
 
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
@@ -122,7 +122,7 @@ header a:hover {
 <body>
 
 <header style="display: flex; justify-content: space-between; align-items: center; padding: 20px; background-color: rgba(74, 144, 226, 0.8);">
-    <h1 style="margin: 0;">Mundo System</h1>
+    <h1 style="margin: 0;">Vitaldentis</h1>
     <a href="{{ asset('video/videodemo.mp4') }}" target="_blank">Ver Video Demo</a>
     @if (Route::has('login'))
         <div>
@@ -171,7 +171,7 @@ header a:hover {
     </div>
 
     <footer>
-        <p>&copy; 2024 Mundo System. Todos los derechos reservados.</p>
+        <p>&copy; 2025 Geeky Tech. Todos los derechos reservados.</p>
     </footer>
 </div>
 </body>

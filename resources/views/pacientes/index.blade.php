@@ -1,7 +1,7 @@
 {{-- resources/views/pacientes/index.blade.php --}}
 @extends('adminlte::page')
 
-@section('title', 'Pacientes - Mundo System')
+@section('title', 'Pacientes - Vitaldentis')
 
 @section('content_header') 
 <div class="card mb-1">

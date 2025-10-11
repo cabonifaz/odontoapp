@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ config('app.name', 'Mundo System') }}</title>
+    <title>{{ config('app.name', 'Vitaldentis') }}</title>
     <link rel="icon" href="{{ asset('img/logo1.ico') }}" type="image/x-icon"> <!-- Cambia la ruta según donde hayas subido el icono -->
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
@@ -21,7 +21,7 @@
         <!-- Sidebar -->
         <div class="w-54  bg-gray-800 text-white flex-shrink-0">
             <div class="p-4">
-                <h2 class="text-xl font-bold mb-4">{{ config('app.name', 'Mundo Systemas') }}</h2>
+                <h2 class="text-xl font-bold mb-4">{{ config('app.name', 'Vitaldentisas') }}</h2>
                 <nav x-data="{ open: true, settingsOpen: false }" class="bg-gray-800 text-white h-screen transition-all duration-300" :class="open ? 'w-54' : 'w-20'">
     <!-- Botón tipo "hamburguesa" para colapsar el menú -->
     <div class="flex items-center justify-between px-4 py-4">

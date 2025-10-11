@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Impresión de Agenda - Mundo System</title>
+    <title>Impresión de Agenda - Vitaldentis</title>
     <style>
         body {
             font-family: Arial, sans-serif;

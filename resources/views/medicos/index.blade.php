@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', 'Médicos - Mundo System')
+@section('title', 'Médicos - Vitaldentis')
 
 @section('content_header') 
 <div class="card mb-1">

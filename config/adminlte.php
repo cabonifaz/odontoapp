@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'title' => 'Mundo System',
+    'title' => 'VITALDENTIS',
     'title_prefix' => '',
     'title_postfix' => '',
 
@@ -63,7 +63,7 @@ return [
     |
     */
 
-    'logo' => '<b>MUNDO SYSTEM</b>',
+    'logo' => '<b>VITALDENTIS</b>',
     'logo_img' => 'img/logo.png',
     'logo_img_class' => 'brand-image img-circle elevation-3',
     'logo_img_xl' => null,
