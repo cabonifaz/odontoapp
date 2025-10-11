@@ -1,0 +1,8 @@
+[phases.setup]
+nixPaths = []
+
+[phases.install]
+cmds = []
+
+[phases.build]
+cmds = []
