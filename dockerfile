@@ -1,12 +1,13 @@
 FROM php:8.3-cli
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema (incluyendo oniguruma para mbstring)
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
     libzip-dev \
     libxml2-dev \
+    libonig-dev \
     unzip \
     git \
     zip \
