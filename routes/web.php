@@ -46,7 +46,7 @@ Route::post('/hash-password', function (Request $request) {
 
 // Ruta para la página de inicio
 Route::get('/', function () {
-    return view('welcome'); // O 'home' si prefieres renombrar la vista de inicio
+    return redirect()->route('login');
 })->name('home');
 
 // Ruta para el dashboard

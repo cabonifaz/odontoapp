@@ -6,167 +6,315 @@
     <title>Vitaldentis</title>
 
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Styles -->
     <style>
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-image: url('{{ asset("img/imgmundosystems.jpg") }}'); /* Cambia la ruta a la imagen de fondo */
-            background-size: cover; /* Ajusta la imagen para cubrir toda la página */
-            background-position: center; /* Centra la imagen */
-            background-repeat: no-repeat; /* Evita que la imagen se repita */
+        * {
             margin: 0;
             padding: 0;
-            color: #333;
+            box-sizing: border-box;
         }
 
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --primary-light: #3b82f6;
+            --secondary: #0f172a;
+            --accent: #06b6d4;
+            --text-dark: #1e293b;
+            --text-light: #64748b;
+            --bg-light: #f8fafc;
+            --white: #ffffff;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        /* Header Moderno */
         header {
-            background-color: rgba(0, 123, 255, 0.8); /* Fondo con transparencia para que se vea el fondo */
-            color: #fff;
-            padding: 20px;
-            text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
 
+        header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-dark);
+            font-weight: 500;
+            padding: 0.5rem 1.25rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+        }
+
+        .nav-links a:hover {
+            background: var(--primary);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+
+        .btn-demo {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: var(--white) !important;
+            padding: 0.65rem 1.5rem !important;
+            border-radius: 8px;
+            font-weight: 600;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-demo:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px -1px rgba(37, 99, 235, 0.4);
+        }
+
+        /* Container Principal */
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 3rem 2rem;
         }
 
+        /* Hero Section */
         .welcome-message {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 4rem;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .welcome-message h1 {
-            font-size: 3rem;
-            margin-bottom: 10px;
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--white);
+            margin-bottom: 1rem;
+            text-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            line-height: 1.2;
         }
 
         .welcome-message p {
-            font-size: 1.2rem;
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
         }
 
+        /* Tech Cards Section */
         .tech-section {
-            display: flex;
-            justify-content: space-between; /* Cambiado de space-around a space-between para que las tarjetas estén más cerca */
-            flex-wrap: nowrap; /* Asegura que no se envuelvan en una nueva línea */
-            margin-top: 40px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
         }
 
         .tech-card {
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            width: 30%; /* Se mantiene el ancho del 30% para cada tarjeta */
-            margin: 0; /* Se eliminan los márgenes para evitar espacios adicionales */
-            padding: 0; /* Eliminar el padding para hacer que la imagen ocupe todo el espacio */
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            height: 300px; /* Asignar una altura fija */
+            background: var(--white);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tech-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.15);
+        }
+
+        .tech-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .tech-card:hover::before {
+            opacity: 1;
         }
 
         .tech-card img {
             width: 100%;
-            height: 200px; /* Asignar una altura fija para la imagen */
-            object-fit: cover; /* Asegura que la imagen cubra el contenedor */
+            height: 220px;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .tech-card:hover img {
+            transform: scale(1.05);
+        }
+
+        .tech-card-content {
+            padding: 1.75rem;
         }
 
         .tech-card h3 {
             font-size: 1.5rem;
-            margin: 10px 0; /* Margen superior e inferior para separación */
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 0.75rem;
         }
 
         .tech-card p {
             font-size: 1rem;
-            color: #555;
-            padding: 0 10px; /* Agregar padding lateral para el texto */
+            color: var(--text-light);
+            line-height: 1.6;
         }
 
+        /* Footer Moderno */
         footer {
-            background-color: rgba(0, 123, 255, 0.8); /* Fondo con transparencia */
-            color: white;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            color: var(--text-dark);
             text-align: center;
-            padding: 20px;
-            margin-top: 40px;
+            padding: 2rem;
+            margin-top: 4rem;
+            border-radius: 16px 16px 0 0;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
+        footer p {
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
-            .tech-section {
-                flex-wrap: wrap; /* Cambiar a wrap en pantallas más pequeñas */
+            header {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
             }
-            .tech-card {
-                width: 100%; /* Cambiar el ancho a 100% en pantallas más pequeñas */
-                margin-bottom: 20px; /* Margen inferior para separación entre tarjetas */
+
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 0.75rem;
             }
 
             .welcome-message h1 {
-                font-size: 2rem;
+                font-size: 2.25rem;
+            }
+
+            .welcome-message p {
+                font-size: 1.1rem;
+            }
+
+            .tech-section {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .container {
+                padding: 2rem 1rem;
             }
         }
-        header a {
-    text-decoration: none; /* Elimina el subrayado */
-    color: white; /* Asegúrate de que el color del texto sea blanco */
-}
 
-header a:hover {
-    color: #e0e0e0; /* Cambia el color al pasar el ratón */
-}
-.register-link {
-    margin-left: 10px; /* Ajusta el tamaño a tu preferencia */
-}
+        @media (max-width: 480px) {
+            .welcome-message h1 {
+                font-size: 1.75rem;
+            }
 
+            .nav-links a {
+                padding: 0.4rem 1rem;
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
 
-<header style="display: flex; justify-content: space-between; align-items: center; padding: 20px; background-color: rgba(74, 144, 226, 0.8);">
-    <h1 style="margin: 0;">Vitaldentis</h1>
-    <a href="{{ asset('video/videodemo.mp4') }}" target="_blank">Ver Video Demo</a>
-    @if (Route::has('login'))
-        <div>
+<header>
+    <h1>Vitaldentis</h1>
+    <div class="nav-links">
+        <a href="{{ asset('video/videodemo.mp4') }}" target="_blank" class="btn-demo">Ver Video Demo</a>
+        @if (Route::has('login'))
             @auth
-                <a href="{{ url('/dashboard') }}" class="font-semibold text-white hover:text-gray-200 dark:text-gray-400 dark:hover:text-white focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500" style="text-decoration: none;">Panel</a>
+                <a href="{{ url('/dashboard') }}">Panel</a>
             @else
-                <a href="{{ route('login') }}" class="font-semibold text-white hover:text-gray-200 dark:text-gray-400 dark:hover:text-white focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500" style="text-decoration: none;">Ingresar</a>
-
+                <a href="{{ route('login') }}">Ingresar</a>
                 @if (Route::has('register'))
-                    <a href="{{ route('register') }}" class="ml-4 font-semibold text-white hover:text-gray-200 dark:text-gray-400 dark:hover:text-white focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500" style="text-decoration: none;">Registrarse</a>
+                    <a href="{{ route('register') }}">Registrarse</a>
                 @endif
             @endauth
-        </div>
-    @endif
+        @endif
+    </div>
 </header>
-
-
 
 <div class="container">
     <div class="welcome-message">
-        <h1 style="color:white">Bienvenido a la Era de la Tecnología</h1>
-        <p style="color:white">Descubre soluciones innovadoras que transforman el futuro digital.</p>
+        <h1>Bienvenido a la Era de la Tecnología</h1>
+        <p>Descubre soluciones innovadoras que transforman el futuro digital.</p>
     </div>
    
     <div class="tech-section">
         <!-- Card 1: Desarrollo Web -->
         <div class="tech-card">
             <img src="{{ asset('img/webdevelopment.jpg') }}" alt="Desarrollo Web">
-            <h3>Desarrollo Web</h3>
-            <p>Aplicaciones y sitios web a medida, utilizando las últimas tecnologías como Laravel, React, y Vue.js.</p>
+            <div class="tech-card-content">
+                <h3>Desarrollo Web</h3>
+                <p>Aplicaciones y sitios web a medida, utilizando las últimas tecnologías como Laravel, React, y Vue.js.</p>
+            </div>
         </div>
 
         <!-- Card 2: Seguridad Informática -->
         <div class="tech-card">
             <img src="{{ asset('img/ciberseguridad.jpg') }}" alt="Seguridad Informática">
-            <h3>Seguridad Informática</h3>
-            <p>Protege tus datos y sistemas con nuestras soluciones avanzadas de ciberseguridad.</p>
+            <div class="tech-card-content">
+                <h3>Seguridad Informática</h3>
+                <p>Protege tus datos y sistemas con nuestras soluciones avanzadas de ciberseguridad.</p>
+            </div>
         </div>
 
         <!-- Card 3: Cámaras de Seguridad -->
         <div class="tech-card">
             <img src="{{ asset('img/security-cameras.png') }}" alt="Cámaras de Seguridad">
-            <h3>Cámaras de Seguridad</h3>
-            <p>Monitorea tus espacios con nuestras avanzadas cámaras de seguridad, ideales para protección y vigilancia.</p>
+            <div class="tech-card-content">
+                <h3>Cámaras de Seguridad</h3>
+                <p>Monitorea tus espacios con nuestras avanzadas cámaras de seguridad, ideales para protección y vigilancia.</p>
+            </div>
         </div>
     </div>
 
