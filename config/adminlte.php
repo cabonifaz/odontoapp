@@ -63,7 +63,7 @@ return [
     |
     */
 
-    'logo' => '<b>VITALDENTIS</b>',
+    'logo' => '<b>VITALDENTISS</b>',
     'logo_img' => '',
     'logo_img_class' => 'brand-image elevation-3',
     'logo_img_xl' => null,
