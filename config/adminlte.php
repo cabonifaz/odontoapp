@@ -63,8 +63,8 @@ return [
     |
     */
 
-    'logo' => '<b>VITALDENTISS</b>',
-    'logo_img' => '',
+    'logo' => '<b>VITALDENTIS</b>',
+    'logo_img' => 'img/logo.jpg',
     'logo_img_class' => 'brand-image elevation-3',
     'logo_img_xl' => null,
     'logo_img_xl_class' => 'brand-image-xs',
@@ -84,7 +84,7 @@ return [
     */
 
     'auth_logo' => [
-        'enabled' => false,
+        'enabled' => true,
         'img' => [
             'path' => 'img/logo.png',
             'alt' => 'Auth Logo',
