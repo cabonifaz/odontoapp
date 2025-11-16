@@ -487,6 +487,7 @@ $(document).ready(function() {
         clearTimeout(timeout); // Limpiar el temporizador anterior
 
         timeout = setTimeout(() => {
+            const pigv=$('input[name="igv"]').val();
             const total = parseFloat($(this).val()) || 0;
             const subtotal = total / 1.18;
             const igv = subtotal * 0.18;
@@ -568,35 +569,50 @@ $(document).ready(function() {
     });
 
     // Función para cargar las series
-    function cargarSeries(tipodoc, facturadorId) {
-        $.ajax({
-            url: `/parametros/${tipodoc}/series`,
-            method: 'GET',
-            data: {
-                facturador_id: facturadorId // Incluir facturador_id en los datos de la solicitud
-            },
-            dataType: 'json',
-            success: function(data) {
-                const $selectSerie = $('select[name="serie"]');
-                $selectSerie.empty(); // Limpiar el select de series
+function cargarSeries(tipodoc, facturadorId) {
+    $.ajax({
+        url: `/parametros/${tipodoc}/series`,
+        method: 'GET',
+        data: {
+            facturador_id: facturadorId
+        },
+        dataType: 'json',
+        success: function(data) {
 
-                data.series.forEach(function(serie) {
-                    const option = $('<option></option>').val(serie).text(serie);
-                    $selectSerie.append(option);
-                });
+            const parametro = data.series; // ahora es un objeto, NO un array
 
-                // Cargar el correlativo para la primera serie cargada, si existe
-                if (data.series.length > 0) {
-                    $selectSerie.val(data.series[0]).change(); // Lanzar el evento change
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error al cargar las series:', error);
-                console.error('Estado:', status);
-                console.error('Respuesta:', xhr.responseText);
+            if (!parametro) {
+                console.error("No se encontró serie para este facturador/tipodoc");
+                return;
             }
-        });
-    }
+
+            const $selectSerie = $('select[name="serie"]');
+            $selectSerie.empty();
+
+            // Agregar solo una opción porque ahora siempre viene un registro
+            const option = $('<option></option>')
+                .val(parametro.serie)
+                .text(parametro.serie);
+
+            $selectSerie.append(option);
+
+            // Seleccionarla
+            $selectSerie.val(parametro.serie).change();
+
+            // Guardar el IGV en un hidden u otro input
+            $('#igv').val(parametro.igv);
+
+            console.log("Serie cargada:", parametro.serie);
+            console.log("IGV cargado:", parametro.igv);
+        },
+        error: function(xhr, status, error) {
+            console.error('Error al cargar las series:', error);
+            console.error('Estado:', status);
+            console.error('Respuesta:', xhr.responseText);
+        }
+    });
+}
+
 
     function cargarCorrelativo(serie, facturadorId) {
         $.ajax({
