@@ -12,12 +12,18 @@
                 <div class="card mt-0 shadow-sm border-primary">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Datos del Comprobante</h5>
-                        <select id="facturador_id" name="facturador_id" class="form-control ml-2" style="font-size:14px; width: auto; font-weight: bold; background-color: #ffeb3b;" required>
-                            <option value="" disabled selected>Seleccione una empresa</option>
-                            @foreach ($facturadores as $facturador)
-                                <option value="{{ $facturador->id }}">{{ $facturador->razon_social }}</option>
-                            @endforeach
-                        </select>
+                            <select id="facturador_id" name="facturador_id" class="form-control ml-2" style="font-size:14px; width: auto; font-weight: bold; background-color: #ffeb3b;" required {{ count($facturadores) <= 1 ? 'disabled' : '' }}>
+                                <option value="" disabled {{ count($facturadores) > 1 ? 'selected' : '' }}>Seleccione una empresa</option>
+                                @foreach ($facturadores as $facturador) 
+                                    <option value="{{ $facturador->id }}" {{ $loop->first ? 'selected' : '' }}>
+                                        {{ $facturador->razon_social }}
+                                    </option> 
+                                @endforeach
+                            </select>
+
+                            @if(count($facturadores) <= 1 && count($facturadores) > 0)
+                                <input type="hidden" name="facturador_id" value="{{ $facturadores[0]->id }}">
+                            @endif
                     </div>
                     <div class="card-body">
                         <!-- Tipo Doc, Serie, Correlativo, Médicos, Fecha -->
@@ -221,6 +227,7 @@
                         <div class="row mb-2">
                             <div class="col-md-4">
                                 <label for="igv">IGV</label>
+                                <input type="hidden" id="igv_param" name="igv_param">
                             </div>
                             <div class="col-md-8 text-end">
                                 <input type="text" id="igv" name="igv" class="form-control" readonly>
@@ -487,10 +494,16 @@ $(document).ready(function() {
         clearTimeout(timeout); // Limpiar el temporizador anterior
 
         timeout = setTimeout(() => {
-            const pigv=$('input[name="igv"]').val();
+            
+            const igvPorcentaje = parseFloat($('#igv_param').val()) ;
+
+            console.log('---' + $('#igv_param').val());
+
+            const igvFactor = igvPorcentaje / 100;
+
             const total = parseFloat($(this).val()) || 0;
-            const subtotal = total / 1.18;
-            const igv = subtotal * 0.18;
+            const subtotal = total / (1 + igvFactor);
+            const igv = subtotal * igvFactor;
 
             $('input[name="subtotal"]').val(subtotal.toFixed(2));
             $('input[name="igv"]').val(igv.toFixed(2));
@@ -577,34 +590,40 @@ function cargarSeries(tipodoc, facturadorId) {
             facturador_id: facturadorId
         },
         dataType: 'json',
+
         success: function(data) {
 
-            const parametro = data.series; // ahora es un objeto, NO un array
-
-            if (!parametro) {
-                console.error("No se encontró serie para este facturador/tipodoc");
-                return;
-            }
+            console.log("Respuesta cargarSeries:", data);
 
             const $selectSerie = $('select[name="serie"]');
-            $selectSerie.empty();
+            $selectSerie.empty(); 
 
-            // Agregar solo una opción porque ahora siempre viene un registro
-            const option = $('<option></option>')
-                .val(parametro.serie)
-                .text(parametro.serie);
+            // Llenar el select con las series devueltas
+            data.series.forEach(function(item) {
+                const option = $('<option></option>')
+                    .val(item.serie)
+                    .text(item.serie)
+                    .attr("data-igv", item.igv); // Guardamos el IGV en el option
 
-            $selectSerie.append(option);
+                $selectSerie.append(option);
+            });
 
-            // Seleccionarla
-            $selectSerie.val(parametro.serie).change();
+            // Si existe al menos una serie
+            if (data.series.length > 0) {
 
-            // Guardar el IGV en un hidden u otro input
-            $('#igv').val(parametro.igv);
+                const primeraSerie = data.series[0];
 
-            console.log("Serie cargada:", parametro.serie);
-            console.log("IGV cargado:", parametro.igv);
+                // Seleccionar la primera serie
+                $selectSerie.val(primeraSerie.serie);
+
+                // Asignar el IGV al input hidden
+                $('#igv_param').val(primeraSerie.igv);
+                console.log (primeraSerie.igv);
+                // Cargar el correlativo de esa serie
+                cargarCorrelativo(primeraSerie.serie, facturadorId);
+            }
         },
+
         error: function(xhr, status, error) {
             console.error('Error al cargar las series:', error);
             console.error('Estado:', status);
@@ -612,6 +631,8 @@ function cargarSeries(tipodoc, facturadorId) {
         }
     });
 }
+
+
 
 
     function cargarCorrelativo(serie, facturadorId) {
@@ -838,83 +859,87 @@ document.addEventListener("DOMContentLoaded", function () {
             });
             return;
         }
-        //console.log("formData",formdata);
-        Swal.fire({
-            title: "¿Confirmar Facturación y envío a SUNAT?",
-            text: "¿Estás seguro de registrar y enviar a SUNAT este comprobante? ¿Ha verificado que los datos sean correctos?",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "Sí, Guardar y Enviar a SUNAT",
-            cancelButtonText: "Cancelar"
-        }).then((result) => {
-            if (result.isConfirmed) {
-                 // 🔒 Deshabilitar botón para evitar doble envío
-                const btnGuardar = document.getElementById("btn-guardar");
-                btnGuardar.disabled = true;
-                btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Guardando...';
+        console.log("formData",numerodoc);
+        console.log("id tipo doc cli",tipodociden);
 
-                fetch(form.action, {
-                    method: "POST",
-                    body: formData,
-                    headers: {
-                        "X-CSRF-TOKEN": document.querySelector('input[name="_token"]').value
-                    }
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.text().then(text => { throw new Error(text) });
-                    }
-                    return response.json(); // Procesar JSON
-                })
-                .then(data => {
-                    if (data.success) {
-                        const facturaId = data.factura_id; // Capturar el ID de la factura
-                        const facturadorId = document.querySelector("#facturador_id").value;
+            Swal.fire({
+                title: "¿Confirmar Facturación y envío a SUNAT?",
+                text: "¿Estás seguro de registrar y enviar a SUNAT este comprobante? ¿Ha verificado que los datos sean correctos?",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Sí, Guardar y Enviar a SUNAT",
+                cancelButtonText: "Cancelar"
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // 🔒 Deshabilitar botón para evitar doble envío
+                    const btnGuardar = document.getElementById("btn-guardar");
+                    btnGuardar.disabled = true;
+                    btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Guardando...';
 
-                        // Enviar la solicitud para generar el XML y enviarlo a SUNAT
-                        return fetch(`/sunat/generarXML/${facturaId}?tipo=normal`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                            },
-                            body: JSON.stringify({ facturadorId })
-                        }).then(response => {
-                            if (!response.ok) {
-                                return response.text().then(text => { throw new Error(text) });
-                            }
-                            return response.json(); // Procesar la respuesta del envío a SUNAT
-                        });
-                    } else {
-                        throw new Error(data.message || "Ocurrió un error al registrar la factura.");
-                    }
-                })
-                .then(xmlData => {
-                    if (xmlData.success) {
-                        const facturadorId = document.querySelector("#facturador_id").value;
+                    fetch(form.action, {
+                        method: "POST",
+                        body: formData,
+                        headers: {
+                            "X-CSRF-TOKEN": document.querySelector('input[name="_token"]').value
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text) });
+                        }
+                        return response.json(); // Procesar JSON
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            const facturaId = data.factura_id; // Capturar el ID de la factura
+                            const facturadorId = document.querySelector("#facturador_id").value;
+                            
+                            
+                            // Enviar la solicitud para generar el XML y enviarlo a SUNAT
+                            return fetch(`/sunat/generarXML/${facturaId}?tipo=normal`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                                },
+                                body: JSON.stringify({ facturadorId })
+                            }).then(response => {
+                                if (!response.ok) {
+                                    return response.text().then(text => { throw new Error(text) });
+                                }
+                                return response.json(); // Procesar la respuesta del envío a SUNAT
+                            });
+                        } else {
+                            throw new Error(data.message || "Ocurrió un error al registrar la factura.");
+                        }
+                    })
+                    .then(xmlData => {
+                        if (xmlData.success) {
+                            const facturadorId = document.querySelector("#facturador_id").value;
+                            Swal.fire({
+                                title: "Éxito",
+                                text: "El comprobante fue guardado y enviado con éxito.",
+                                icon: "success"
+                            }).then(() => {
+                                // Redirigir a la bandeja de SUNAT con el facturador_id
+                                window.location.href = `{{ route('facturacion.bandejasunat') }}?facturador_id=${facturadorId}`;
+                            });
+                        } else {
+                            throw new Error(xmlData.message || "Error al enviar el comprobante a SUNAT.");
+                        }
+                    })
+                    .catch(error => {
                         Swal.fire({
-                            title: "Éxito",
-                            text: "El comprobante fue guardado y enviado con éxito.",
-                            icon: "success"
-                        }).then(() => {
-                            // Redirigir a la bandeja de SUNAT con el facturador_id
-                            window.location.href = `{{ route('facturacion.bandejasunat') }}?facturador_id=${facturadorId}`;
+                            title: "Error",
+                            text: error.message || "No se pudo procesar la solicitud.",
+                            icon: "error"
                         });
-                    } else {
-                        throw new Error(xmlData.message || "Error al enviar el comprobante a SUNAT.");
-                    }
-                })
-                .catch(error => {
-                    Swal.fire({
-                        title: "Error",
-                        text: error.message || "No se pudo procesar la solicitud.",
-                        icon: "error"
+                        console.error("Error:", error);
                     });
-                    console.error("Error:", error);
-                });
-            }
-        });
+                }
+            });
+
     });
 });
 </script>
