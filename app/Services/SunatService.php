@@ -14,7 +14,7 @@ class SunatService
     private $cdrPath;
     private $certificado;
     private $certPassword;
-    private $ws = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService?wsdl';
+    private $ws = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
     //private $ws = "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService?wsdl";
 
     public function __construct()
