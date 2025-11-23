@@ -12,6 +12,7 @@ class Cliente extends Model
         'rsocial',
         'direccion',
         'ruc',
-        // Otros campos relevantes
+        'empresa_id', // Agregado
+        'user_id',    // Agregado: Es obligatorio para que funcione el updateOrCreate
     ];
 }

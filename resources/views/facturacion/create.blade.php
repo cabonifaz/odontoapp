@@ -153,21 +153,21 @@
                                 <input type="text" id="razon_social" name="razon_social" class="form-control">
                             </div>
                         </div>
+                        <!-- Dirección -->
+                        <div class="row mt-3 align-items-center">
+                            <div class="col-md-2">
+                                <label for="direccion" style="font-size: 14px;">Dirección</label>
+                            </div>
+                            <div class="col-md-10 mb-1">
+                                <input type="text" id="direccion" name="direccion" class="form-control">
+                            </div>
+                        </div>
                         <!-- Checkbox para mostrar el nombre del paciente en el comprobante -->
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="mostrarNombrePaciente" name="mostrarNombrePaciente">
                             <label class="form-check-label fw-bold text-primary" for="mostrarNombrePaciente">
                                 Mostrar Nombre de Paciente en el comprobante
                             </label>
-                        </div>
-                         <!-- Direccion -->
-                         <div class="row mt-3 mb-3 align-items-center" hidden>
-                            <div class="col-md-2">
-                                <label for="razon_social">Dirección</label>
-                            </div>
-                            <div class="col-md-10">
-                                <input type="text" id="direccion" name="direccion" class="form-control">
-                            </div>
                         </div>
                     </div>
                 </div>

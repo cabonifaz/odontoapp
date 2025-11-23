@@ -30,6 +30,7 @@ use App\Mail\FacturaMail;
 use App\Helpers\NumeroALetras;
 use Illuminate\Support\Facades\DB;
 
+
 class FacturacionController extends Controller
 {
     public function index()
@@ -67,7 +68,7 @@ class FacturacionController extends Controller
                 \Log::error('Error: procedimiento_id no es un array', ['procedimiento_id' => $request->input('procedimiento_id')]);
             }
 
-            // Validación sin 'numdoc'
+            // Validación
             $validatedData = $request->validate([
                 'presupuesto_id' => 'nullable',
                 'fecha_presupuesto' => 'required|date',
@@ -88,13 +89,37 @@ class FacturacionController extends Controller
                 'medio_pago' => 'required',
                 'mostrarNombrePaciente' => 'required',
                 'facturador_id' => 'required|integer|exists:facturadores,id',
+                // Recibimos estos datos solo para gestionar el Cliente, no para la factura
+                'razon_social' => 'nullable|string',
+                'direccion' => 'nullable|string',
             ]);
 
             return DB::transaction(function () use ($validatedData, $request) {
+                
+                // ---------------------------------------------------------
+                // 1. GESTIÓN DE CLIENTE (EMPRESA)
+                // ---------------------------------------------------------
+                // Si es RUC (6) y tenemos Razón Social, aseguramos que el cliente exista en la tabla maestra.
+                if ($validatedData['tipo_doc'] === '6' && !empty($request->input('razon_social'))) {
+                    
+                    // Buscamos por RUC y actualizamos o creamos
+                    Cliente::updateOrCreate(
+                        ['ruc' => $validatedData['num_doc']], // Clave de búsqueda
+                        [
+                            'rsocial' => strtoupper($request->input('razon_social')),
+                            'direccion' => strtoupper($request->input('direccion') ?? '-'),
+                            'empresa_id' => auth()->user()->empresa_id ?? 1,
+                            'user_id' => auth()->id()
+                        ]
+                    );
+                    // Ahora el cliente ya existe en la tabla 'clientes' para futuras consultas
+                }
+                // ---------------------------------------------------------
+
                 $fecha_presupuesto = Carbon::parse($validatedData['fecha_presupuesto'])->setTimezone('America/Lima');
                 $validatedData['presupuesto_id'] = $validatedData['presupuesto_id'] ?? 0;
 
-                // 🔐 Obtener correlativos ocupados con bloqueo para evitar duplicados
+                // 🔐 Obtener correlativos ocupados con bloqueo
                 $correlativosOcupados = Facturacion::where('serie', $validatedData['serie'])
                     ->where('facturador_id', $validatedData['facturador_id'])
                     ->lockForUpdate()
@@ -106,21 +131,19 @@ class FacturacionController extends Controller
                     ->values()
                     ->toArray();
 
-                // Buscar el menor número faltante
+                // Buscar hueco en correlativos
                 $siguienteCorrelativoNum = 1;
-
                 foreach ($correlativosOcupados as $num) {
                     if ($num == $siguienteCorrelativoNum) {
                         $siguienteCorrelativoNum++;
                     } elseif ($num > $siguienteCorrelativoNum) {
-                        // Se detecta un hueco
                         break;
                     }
                 }
 
                 $siguienteCorrelativo = str_pad($siguienteCorrelativoNum, 8, '0', STR_PAD_LEFT);
 
-                // ✅ Crear la factura
+                // ✅ Crear la factura (Estructura original, sin campos nuevos)
                 $facturacion = Facturacion::create([
                     'presupuesto_id' => $validatedData['presupuesto_id'],
                     'fecha' => $fecha_presupuesto,
@@ -163,7 +186,7 @@ class FacturacionController extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Comprobante y detalles creados con éxito.',
+                    'message' => 'Comprobante registrado con éxito.',
                     'factura_id' => $facturacion->id,
                 ]);
             });

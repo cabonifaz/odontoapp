@@ -17,6 +17,7 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 use App\Exports\VentasExport;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Http;
 
 class SunatController extends Controller
 {
@@ -481,9 +482,9 @@ class SunatController extends Controller
 
     }
              
-    public function generarXML(Request $request, $nroFactura)
+  public function generarXML(Request $request, $nroFactura)
     {
-        // Obtener el parámetro 'tipo' de la solicitud
+        // Obtener parámetros
         $tipo = $request->query('tipo', 'normal');
         $serieNota = $request->input('serieNota', '');
         $numdocNota = $request->input('numdocNota', '');
@@ -491,45 +492,31 @@ class SunatController extends Controller
         $motivo = $request->input('motivo', '');
         $facturadorId = $request->input('facturadorId');
         
-        // Escribir en el log para ver el valor del facturador_id
-        \Log::info('Valor del facturador_id recibido: ' . $facturadorId);
-        // Obtener la factura según el número de factura
+        \Log::info('Generando XML para factura ID: ' . $nroFactura);
+
+        // 1. Obtener Factura
         $factura = DB::table('facturaciones')->where('id', $nroFactura)->first();
-
         if (!$factura) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Factura no encontrada.'
-            ]);
+            return response()->json(['success' => false, 'message' => 'Factura no encontrada.']);
         }
 
-        // Obtener los detalles de facturación
+        // 2. Obtener Detalles
         $detalle_facturacion = DB::table('detalle_facturacion')->where('facturaciones_id', $factura->id)->get();
-
-        if (!$detalle_facturacion) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Factura no encontrada.'
-            ]);
+        if ($detalle_facturacion->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Detalles de factura no encontrados.']);
         }
 
-        // Obtener nombres de tratamientos y procedimientos
         foreach ($detalle_facturacion as $detalle) {
             $detalle->tratamiento = DB::table('actividades')->where('id', $detalle->tratamiento_id)->first();
             $detalle->procedimiento = DB::table('servicios')->where('id', $detalle->procedimiento_id)->first();
         }
 
-        // Hacemos la consulta a la tabla facturadores para obtener el registro con el id proporcionado
+        // 3. Obtener Facturador
         $facturador = Facturador::find($facturadorId);
         if (!$facturador) {
-            \Log::error('Facturador no encontrado para el ID: ' . $facturadorId);
-            return response()->json([
-                'success' => false,
-                'message' => 'Facturador no encontrado.'
-            ]);
+            return response()->json(['success' => false, 'message' => 'Facturador no encontrado.']);
         }
-        \Log::info('Facturador encontrado: ' . $facturador->razon_social);
-        // Datos del emisor
+
         $emisor = [
             'ruc' => $facturador->ruc,
             'razon_social' => $facturador->razon_social,
@@ -542,7 +529,6 @@ class SunatController extends Controller
             'ubigeo_distrito' => $facturador->ubigeo_distrito,
         ];
 
-        // Datos del comprobante
         $comprobante = [
             'tipo' => $factura->tipodoc,
             'serie' => $factura->serie,
@@ -551,37 +537,112 @@ class SunatController extends Controller
             'hora_emision' => Carbon::parse($factura->fecha)->format('H:i:s'),
         ];
 
-        // Verificar y obtener el cliente desde la tabla 'clientes'
-        $pacienteDB = DB::table('pacientes')->where('id', $factura->paciente_id)->first();
-        if (!$pacienteDB) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Paciente no encontrado.'
-            ]);
-        }
+        // ---------------------------------------------------------
+        // 4. LÓGICA DE CLIENTE 
+        // ---------------------------------------------------------
+        
+        $cliente = null;
 
-        // Construcción de datos del cliente
-        if ($factura->t_doc_iden === "6") { // Si el tipo de documento es RUC, buscar en clientes
-            $clienteRUC = DB::table('clientes')->where('ruc', $factura->num_doc_iden)->first();
+        // === CASO A: EMPRESA (RUC) ===
+        if ($factura->t_doc_iden === "6") { 
+            // 1. Buscar en BD
+            $clienteDB = DB::table('clientes')->where('ruc', $factura->num_doc_iden)->first();
+            
+            // 2. Si no existe, intentar Auto-Registro
+            if (!$clienteDB) {
+                try {
+                    // A. Datos previos
+                    $razonSocial = $factura->razon_social ?? null;
+                    $direccion = $factura->direccion ?? '-';
 
-            if ($clienteRUC) {
-                $cliente = [
-                    'nombre' => strtoupper($clienteRUC->rsocial),
-                    'documento' => $clienteRUC->ruc,
-                    'direccion' => strtoupper($clienteRUC->direccion),
-                    'tipo_documento' => '6', // RUC
-                ];
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cliente con RUC no encontrado.'
-                ]);
+                    // B. Consultar API si no hay nombre
+                    if (empty($razonSocial)) {
+                        try {
+                            $token = '1|1E0P5WndD4SQB1O8sMQzRCL6gNzRINXkRgLxVn3R5afac0d1';
+                            $response = Http::withoutVerifying()->withHeaders([
+                                'Authorization' => 'Bearer ' . $token,
+                                'Accept' => 'application/json'
+                            ])->get('https://apidni.net.lass.pe/api/buscar-ruc/' . $factura->num_doc_iden);
+
+                            if ($response->successful()) {
+                                $dataApi = $response->json();
+                                $razonSocial = $dataApi['razon_social'] ?? $dataApi['nombre'] ?? null;
+                                $direccion = $dataApi['direccion'] ?? $direccion;
+                            }
+                        } catch (\Exception $eApi) {
+                            \Log::warning("Fallo API RUC: " . $eApi->getMessage());
+                        }
+                    }
+
+                    // C. VALIDACIÓN ESTRICTA PARA FACTURAS
+                    if (empty($razonSocial)) {
+                        // Si es FACTURA (01) y no tenemos Razón Social => ERROR BLOQUEANTE
+                        if ($factura->tipodoc === '01') {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Error: La Razón Social es obligatoria para emitir una FACTURA y no se pudo obtener automáticamente.'
+                            ]);
+                        }
+                        
+                        // Si es BOLETA, usamos genérico
+                        $razonSocial = 'CLIENTE - ' . $factura->num_doc_iden;
+                    }
+
+                    // Insertar en BD
+                    $newClienteId = DB::table('clientes')->insertGetId([
+                        'ruc' => $factura->num_doc_iden,
+                        'rsocial' => strtoupper($razonSocial),
+                        'direccion' => strtoupper($direccion),
+                        'empresa_id' => $factura->empresa_id ?? 1,
+                        'user_id' => $factura->user_id ?? 1,
+                        'created_at' => Carbon::now(),
+                        'updated_at' => Carbon::now(),
+                    ]);
+
+                    $clienteDB = DB::table('clientes')->where('id', $newClienteId)->first();
+
+                } catch (\Exception $e) {
+                    \Log::error("Error Auto-Registro RUC: " . $e->getMessage());
+                    
+                    // Si falló la BD pero tenemos el dato (ej. API funcionó pero BD falló), usamos memoria
+                    if (!empty($razonSocial)) {
+                         $cliente = [
+                            'nombre' => strtoupper($razonSocial),
+                            'documento' => $factura->num_doc_iden,
+                            'direccion' => strtoupper($direccion),
+                            'tipo_documento' => '6',
+                        ];
+                    } else {
+                        // Si no tenemos dato y es Factura => ERROR (incluso en catch)
+                        if ($factura->tipodoc === '01') {
+                            return response()->json(['success' => false, 'message' => 'Error crítico: No se puede emitir Factura sin Razón Social.']);
+                        }
+                        // Fallback Boleta
+                        $cliente = [
+                            'nombre' => 'CLIENTE - ' . $factura->num_doc_iden,
+                            'documento' => $factura->num_doc_iden,
+                            'direccion' => '-',
+                            'tipo_documento' => '6',
+                        ];
+                    }
+                }
             }
-        } else { // Si no es RUC, buscar primero en pacientes
+
+            if ($clienteDB && !$cliente) {
+                $cliente = [
+                    'nombre' => strtoupper($clienteDB->rsocial),
+                    'documento' => $clienteDB->ruc,
+                    'direccion' => strtoupper($clienteDB->direccion),
+                    'tipo_documento' => '6',
+                ];
+            }
+        } 
+        // === CASO B: PERSONA (DNI/CEX) ===
+        else { 
             $pacienteDB = DB::table('pacientes')
-                            ->where('tipodocumento', $factura->t_doc_iden)
-                            ->where('numerodoc', $factura->num_doc_iden)
-                            ->first();
+                ->where('tipodocumento', $factura->t_doc_iden)
+                ->where('numerodoc', $factura->num_doc_iden)
+                ->first();
 
             if ($pacienteDB) {
                 $cliente = [
@@ -591,48 +652,45 @@ class SunatController extends Controller
                     'tipo_documento' => $pacienteDB->tipodocumento,
                 ];
             } else {
-                // Si no se encuentra en pacientes, buscar en clientes por el número de documento
                 $clienteDB = DB::table('clientes')->where('ruc', $factura->num_doc_iden)->first();
-
                 if ($clienteDB) {
                     $cliente = [
                         'nombre' => strtoupper($clienteDB->rsocial),
                         'documento' => $clienteDB->ruc,
                         'direccion' => strtoupper($clienteDB->direccion),
-                        'tipo_documento' => $factura->t_doc_iden, // RUC
+                        'tipo_documento' => $factura->t_doc_iden,
                     ];
-                } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'No se encontró registro en pacientes ni clientes.'
-                    ]);
                 }
             }
         }
 
+        // Validación Final
+        if (!$cliente) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Paciente no encontrado. Para documentos personales (DNI/CEX) el registro es obligatorio.'
+            ]);
+        }
+
+        // 5. Cálculos y Generación
         $total = $factura->importe;
         $subtotal = ($total / 1.18);
         $igv = $subtotal * 0.18;
         $total_convertir = number_format($total, 2, '.', '');
         $montoLiteral = $this->convertirNumerosALetras($total_convertir);
 
-        // Determinar a qué función llamar
         if ($tipo === 'baja') {
             if ($comprobante['tipo'] === '01') {
-                // Llamar a crearXML_Baja
                 return $this->crearXML_Baja($emisor, $comprobante, $cliente, $nroFactura);
             } else if ($comprobante['tipo'] === '03') {
                 return $this->crearXML_Resumen($emisor, $comprobante, $cliente, $nroFactura, $total, $igv, $subtotal);
             }
         } else if ($tipo === 'nota') {
-            // Llamar a crearXML_Nota con datos adicionales de la nota
             return $this->crearXML_Nota($emisor, $comprobante, $cliente, $total, $igv, $subtotal, $montoLiteral, $nroFactura, $detalle_facturacion, $serieNota, $numdocNota, $fechaNota, $motivo);
         } else {
-            // Llamar al método para crear el XML
             return $this->crearXML($emisor, $comprobante, $cliente, $total, $igv, $subtotal, $montoLiteral, $nroFactura, $detalle_facturacion);
         }
     }
-
 
     private function convertirNumerosALetras($numero)
     {
