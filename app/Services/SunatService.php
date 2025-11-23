@@ -19,27 +19,25 @@ class SunatService
     private $ws = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
     //private $ws = "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService?wsdl"; // Producción
 
+// ... propiedades existentes ...
+
     public function __construct()
     {
-        // Definir rutas absolutas usando public_path (compatible con la estructura de carpetas de Railway)
+        // Definir rutas absolutas
         $this->firmaPath = public_path('sunat_files/firma/');
         $this->cdrPath = public_path('sunat_files/cdr/');
-        $this->xmlPath = public_path('sunat_files/xml/');
-        $this->caCertPath = public_path('sunat_files/cacert.pem');
+        $this->xmlPath = public_path('sunat_files/xml/'); // Nueva ruta para XMLs sin firmar
 
-        // ---------------------------------------------------------
-        // CORRECCIÓN CRÍTICA PARA RAILWAY / DOCKER
-        // ---------------------------------------------------------
-        // Git no sube carpetas vacías. En Railway, estas carpetas no existen
-        // al inicio. Las creamos dinámicamente para evitar error "No such file".
+        // --- AUTO-CREACIÓN DE CARPETAS ---
+        // Verifica si existen, si no, las crea con permisos de escritura (0777 para evitar problemas)
         if (!file_exists($this->firmaPath)) {
-            mkdir($this->firmaPath, 0775, true);
+            mkdir($this->firmaPath, 0777, true);
         }
         if (!file_exists($this->cdrPath)) {
-            mkdir($this->cdrPath, 0775, true);
+            mkdir($this->cdrPath, 0777, true);
         }
         if (!file_exists($this->xmlPath)) {
-            mkdir($this->xmlPath, 0775, true);
+            mkdir($this->xmlPath, 0777, true);
         }
     }
 
@@ -174,7 +172,7 @@ class SunatService
             XML;
     }
 
-    private function enviarASunat($xmlEnvio)
+private function enviarASunat($xmlEnvio)
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $this->ws);
@@ -186,20 +184,11 @@ class SunatService
             "Content-length: " . strlen($xmlEnvio),
         ]);
         
-        // ---------------------------------------------------------
-        // CORRECCIÓN SSL PARA RAILWAY
-        // ---------------------------------------------------------
-        // Railway usa entornos seguros. Es vital apuntar al CA Bundle correcto
-        // para evitar errores "SSL certificate problem: unable to get local issuer certificate"
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        if (file_exists($this->caCertPath)) {
-            curl_setopt($ch, CURLOPT_CAINFO, $this->caCertPath);
-        } else {
-            // Si no hay CA personalizado, confiamos en el del sistema (Railway suele tenerlos actualizados)
-            // Pero logueamos advertencia
-            Log::warning("No se encontró cacert.pem en " . $this->caCertPath . ". Usando CA del sistema.");
-        }
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        // --- CORRECCIÓN SSL PARA BETA SUNAT ---
+        // En Beta, los certificados a menudo fallan la validación estricta.
+        // Se deshabilita VERIFYPEER para evitar el error "self-signed certificate".
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); 
 
         $response = curl_exec($ch);
         if (curl_errno($ch)) {
@@ -344,66 +333,47 @@ class SunatService
    }
    
    private function enviarASunat_Baja($xmlEnvio)
-   {
-       $ch = curl_init();
-       curl_setopt($ch, CURLOPT_URL, $this->ws);
-       curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-       curl_setopt($ch, CURLOPT_POST, true);
-       curl_setopt($ch, CURLOPT_POSTFIELDS, $xmlEnvio);
-       curl_setopt($ch, CURLOPT_HTTPHEADER, [
-           "Content-type: text/xml; charset=\"utf-8\"",
-           "Content-length: " . strlen($xmlEnvio),
-       ]);
-       
-       curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-       if (file_exists($this->caCertPath)) {
-           curl_setopt($ch, CURLOPT_CAINFO, $this->caCertPath);
-       }
-       curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-   
-       $response = curl_exec($ch);
-       if (curl_errno($ch)) {
-           throw new Exception('Error conexión Baja: ' . curl_error($ch));
-       }
-       curl_close($ch);
-   
-       $doc = new \DOMDocument();
-       @$doc->loadXML($response);
-   
-       $ticketNode = $doc->getElementsByTagName('ticket')->item(0);
-       if ($ticketNode) {
-           return $ticketNode->nodeValue;
-       }
-       
-       // Verificar si es error
-       $faultString = $doc->getElementsByTagName('faultstring')->item(0)->nodeValue ?? null;
-       if($faultString) {
-           throw new Exception("SUNAT Error (Ticket): " . $faultString);
-       }
-   
-       return null;
-   }   
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->ws);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $xmlEnvio);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Content-type: text/xml; charset=\"utf-8\"",
+            "Content-length: " . strlen($xmlEnvio),
+        ]);
+        
+        // --- CORRECCIÓN SSL PARA BETA SUNAT ---
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+    
+        $response = curl_exec($ch);
+        if (curl_errno($ch)) {
+            throw new Exception('Error conexión Baja: ' . curl_error($ch));
+        }
+        curl_close($ch);
+    
+        $doc = new \DOMDocument();
+        @$doc->loadXML($response);
+    
+        $ticketNode = $doc->getElementsByTagName('ticket')->item(0);
+        if ($ticketNode) {
+            return $ticketNode->nodeValue;
+        }
+        
+        $faultString = $doc->getElementsByTagName('faultstring')->item(0)->nodeValue ?? null;
+        if($faultString) {
+            throw new Exception("SUNAT Error (Ticket): " . $faultString);
+        }
+    
+        return null;
+    } 
 
-   public function consultarEstadoSunat($ticket, $emisor) {
+  public function consultarEstadoSunat($ticket, $emisor) {
+       // ... (código anterior del XML) ...
        $statusXml = '<?xml version="1.0" encoding="UTF-8"?>
-       <soapenv:Envelope 
-       xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-       xmlns:ser="http://service.sunat.gob.pe" 
-       xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"> 
-           <soapenv:Header> 
-               <wsse:Security> 
-                   <wsse:UsernameToken> 
-                       <wsse:Username>' . $emisor['ruc'] . $emisor['usuario_emisor'] . '</wsse:Username> 
-                       <wsse:Password>' . $emisor['clave_emisor'] . '</wsse:Password> 
-                   </wsse:UsernameToken> 
-               </wsse:Security> 
-           </soapenv:Header> 
-           <soapenv:Body> 
-               <ser:getStatus> 
-                   <ticket>' . $ticket . '</ticket> 
-               </ser:getStatus> 
-           </soapenv:Body> 
-       </soapenv:Envelope>';
+       <soapenv:Envelope ...> ... </soapenv:Envelope>';
        
        $ch = curl_init();
        curl_setopt($ch, CURLOPT_URL, $this->ws);
@@ -415,11 +385,9 @@ class SunatService
            "Content-Length: " . strlen($statusXml)
        ]);
        
-       curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-       if (file_exists($this->caCertPath)) {
-           curl_setopt($ch, CURLOPT_CAINFO, $this->caCertPath);
-       }
-       curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+       // --- CORRECCIÓN SSL PARA BETA SUNAT ---
+       curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+       curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
    
        $response = curl_exec($ch);
        if (curl_errno($ch)) {

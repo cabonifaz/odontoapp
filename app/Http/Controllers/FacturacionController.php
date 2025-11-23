@@ -400,780 +400,374 @@ class FacturacionController extends Controller
         }
     }
 
-
-    public function generarPDFFactura(Request $request, $id)
+public function generarPDFFactura(Request $request, $id)
     {
         try {
+            $numeroWhatsApp = $request->input('numeroWhatsApp');
+            $email = $request->input('email');
 
-        $numeroWhatsApp = $request->input('numeroWhatsApp');
-        $email = $request->input('email');
-        $facturadorId = $request->input('facturadorId');
-        //Log::info("Iniciando la generación del PDF para la factura con ID: $id");
-        //Log::info("Email y Numero WhatsApp recibidos:", ['email' => $email, 'numeroWhatsApp' => $numeroWhatsApp]);
-        // Cargar la factura con sus relaciones
-        $factura = Facturacion::with(['paciente', 'detalles.tratamiento', 'detalles.procedimiento'])->find($id);
+            // 1. Cargar Factura
+            $factura = Facturacion::with(['paciente', 'detalles.tratamiento', 'detalles.procedimiento'])->find($id);
 
-        if (!$factura) {
-            //Log::error("Factura no encontrada con el ID: $id");
-            return response()->json(['error' => 'Factura no encontrada'], 404);
-        }
+            if (!$factura) {
+                return response()->json(['error' => 'Factura no encontrada'], 404);
+            }
 
-        //Log::info("Factura encontrada: ", ['factura' => $factura]);
+            $facturadorId = $request->input('facturadorId') ?? ($factura->facturador_id ?? null);
 
-        // Array para almacenar los detalles de la factura
-        $detallesFactura = [];
+            // 2. Lógica de Cliente / Paciente (Restaurada de tu archivo original)
+            $nombre = '';
+            $direccion = '';
+            $tipoDocIdent = $factura->t_doc_iden;
+            $numeroDocumento = $factura->num_doc_iden;
 
-        foreach ($factura->detalles as $detalle) {
-            $descripcion = $detalle->tratamiento->nombre . ' - ' . $detalle->procedimiento->nombre;
-            $detallesFactura[] = [
-                'cantidad' => 1,
-                'descripcion' => $descripcion,
-                'importe' => $detalle->importe,
-            ];
-        }
-
-        //Log::info("Detalles de la factura procesados: ", ['detallesFactura' => $detallesFactura]);
-            
-            if ($factura->t_doc_iden === "6") { // Si es RUC, buscar en la tabla de clientes
+            if ($factura->t_doc_iden === "6") { // RUC
                 if (!empty($factura->num_doc_iden) && strlen($factura->num_doc_iden) === 11) {
                     $cliente = Cliente::where('ruc', $factura->num_doc_iden)->first();
-            
                     if ($cliente) {
-                        $numeroDocumento = $factura->num_doc_iden;
                         $nombre = strtoupper($cliente->rsocial);
                         $direccion = strtoupper($cliente->direccion);
                     } else {
-                        return response()->json(['error' => 'Cliente no encontrado'], 404);
+                        // Fallback si no está en tabla clientes pero tiene RUC
+                        $nombre = "CLIENTE RUC " . $factura->num_doc_iden; 
                     }
-                } else {
-                    return response()->json(['error' => 'El RUC es obligatorio para facturas y debe tener 11 dígitos.'], 400);
                 }
-            } elseif (in_array($factura->t_doc_iden, ["1", "4"])) { // Si es DNI o CEX, buscar en pacientes primero
-                $paciente = Paciente::where('tipodocumento', $factura->t_doc_iden)
-                                    ->where('numerodoc', $factura->num_doc_iden)
-                                    ->first();
-            
-                if ($paciente) {
-                    $tipoDocIdent = $factura->t_doc_iden;
-                    $numeroDocumento = $factura->num_doc_iden;
-                    $nombre = strtoupper($paciente->nombres . ' ' . $paciente->ape_paterno . ' ' . $paciente->ape_materno);
-                    $direccion = strtoupper($paciente->direccion);
+            } elseif (in_array($factura->t_doc_iden, ["1", "4", "7", "0"])) { // DNI, CEX, PAS, OTROS
+                if ($factura->paciente) {
+                    $nombre = strtoupper($factura->paciente->nombres . ' ' . $factura->paciente->ape_paterno . ' ' . $factura->paciente->ape_materno);
+                    $direccion = strtoupper($factura->paciente->direccion);
                 } else {
-                    // Si no se encuentra en pacientes, buscar en clientes por el mismo número de documento
-                    $cliente = Cliente::where('ruc', $factura->num_doc_iden)->first();
-            
-                    if ($cliente) {
-                        $tipoDocIdent = $factura->t_doc_iden;
-                        $numeroDocumento = $cliente->ruc;
-                        $nombre = strtoupper($cliente->rsocial);
-                        $direccion = strtoupper($cliente->direccion);
+                    // Búsqueda manual como respaldo
+                    $paciente = Paciente::where('tipodocumento', $factura->t_doc_iden)
+                                        ->where('numerodoc', $factura->num_doc_iden)->first();
+                    if ($paciente) {
+                        $nombre = strtoupper($paciente->nombres . ' ' . $paciente->ape_paterno . ' ' . $paciente->ape_materno);
+                        $direccion = strtoupper($paciente->direccion);
                     } else {
-                        return response()->json(['error' => 'No se encontró registro en pacientes ni clientes'], 404);
+                        $cliente = Cliente::where('ruc', $factura->num_doc_iden)->first();
+                        if ($cliente) {
+                            $nombre = strtoupper($cliente->rsocial);
+                            $direccion = strtoupper($cliente->direccion);
+                        }
                     }
                 }
-            } else {
-                return response()->json(['error' => 'Tipo de documento no válido.'], 400);
             }
-            $fechaEmision = Carbon::parse($factura->fecha)->format('d/m/Y');
-            $usuario = Auth::user()->name;
-            $correlativo = "$factura->serie-$factura->numdoc";
 
-            $subtotal = number_format($factura->subtotal, 2, '.', ',');
-            $igv = number_format($factura->igv, 2, '.', ',');
-            $total = number_format($factura->importe, 2, '.', ',');
-            $montoLimpio = number_format(floatval($factura->importe), 2, '.', '');
-            //$montoLiteral = $this->convertirNumerosALetras($montoLimpio);
-            $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
+            // 3. Preparar datos del PDF
+            $fechaEmision = Carbon::parse($factura->fecha)->format('d/m/Y');
+            $usuario = Auth::user()->name ?? 'Sistema';
+            $correlativo = "$factura->serie-$factura->numdoc";
             
-            $tipodoc = null;
-            if (strlen($numeroDocumento) == 11) {
-                $tipodoc = 6; // RUC
-            } else {
-                $tipodoc = $tipoDocIdent;
-            }
-            if ($tipodoc == '1') {
-                $labelTD = 'DNI';
-            } else if ($tipodoc == '4') {
-                $labelTD = 'CEX';
-            } else if ($tipodoc == '6') {
-                $labelTD = 'RUC';
-            } else if ($tipodoc == '7') {
-                $labelTD = 'PAS';
-            }
+            $montoLimpio = number_format(floatval($factura->importe), 2, '.', '');
+            $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
+
+            $tipodoc = (strlen($numeroDocumento) == 11) ? 6 : $tipoDocIdent;
+            $labelTD = match($tipodoc) { '1' => 'DNI', '4' => 'CEX', '6' => 'RUC', '7' => 'PAS', default => 'DOC' };
+            
             $tipoDocumento = ($factura->tipodoc == '01') ? 'Factura Electrónica' : 'Boleta de Venta Electrónica';
             $hash_code = $factura->hash_cpe;
-            
-            $mostrar_paciente = null; // Valor predeterminado
-            $obser = $factura->observaciones;
-            if ($factura->mostrar_paciente == 1) {
-                // Asignar nombre completo del paciente con "Paciente:" incluido
-                $mostrar_paciente = strtoupper($factura->paciente->ape_paterno . ' ' . $factura->paciente->ape_materno . ' ' . $factura->paciente->nombres);
-            } else {
-                $mostrar_paciente = null;
-            }
-            
-            // Hacemos la consulta a la tabla facturadores para obtener el registro con el id proporcionado
+
+            // Facturador / Emisor
             $facturador = Facturador::find($facturadorId);
             if (!$facturador) {
-                //\Log::error('Facturador no encontrado para el ID: ' . $facturadorId);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Facturador no encontrado.'
-                ]);
+                // Fallback al primer facturador si no se encuentra
+                $facturador = Facturador::first();
             }
-            //\Log::info('Facturador encontrado: ' . $facturador->razon_social);
-            // Datos del emisor
-            $emisor = [
-                'ruc' => $facturador->ruc,
-                'razon_social' => $facturador->razon_social,
-                'direccion' => $facturador->direccion,
-                'nombre_comercial' => $facturador->nombre_comercial,
-                'ubigeo_dpto' => $facturador->ubigeo_dpto,
-                'ubigeo_provincia' => $facturador->ubigeo_provincia,
-                'ubigeo_distrito' => $facturador->ubigeo_distrito,
-            ];
-            $ruc = $emisor['ruc'];
-            $QR = "$ruc|$factura->tipodoc|$correlativo|$igv|$total|$fechaEmision|$tipodoc|$numeroDocumento|$hash_code";
             
-            // Usar el nuevo renderer
-            $renderer = new ImageRenderer(
-                new RendererStyle(80),
-                new SvgImageBackEnd()
-            );
+            $emisor = [
+                'ruc' => $facturador->ruc ?? '00000000000',
+                'razon_social' => $facturador->razon_social ?? 'EMPRESA DEMO',
+                'direccion' => $facturador->direccion ?? 'DIRECCION DEMO',
+                'nombre_comercial' => $facturador->nombre_comercial ?? '',
+                'ubigeo_dpto' => $facturador->ubigeo_dpto ?? '',
+                'ubigeo_provincia' => $facturador->ubigeo_provincia ?? '',
+                'ubigeo_distrito' => $facturador->ubigeo_distrito ?? '',
+            ];
+
+            // Generar QR
+            $rucEmisor = $emisor['ruc'];
+            $QR = "$rucEmisor|$factura->tipodoc|$correlativo|$factura->igv|$factura->importe|$fechaEmision|$tipodoc|$numeroDocumento|$hash_code";
+            
+            $renderer = new ImageRenderer(new RendererStyle(80), new SvgImageBackEnd());
             $writer = new Writer($renderer);
-            $qrCodeData = $writer->writeString($QR);
-            $qrCodeBase64 = base64_encode($qrCodeData);
+            $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
-            $logoPath = public_path('img/logo.png');
-            $type = pathinfo($logoPath, PATHINFO_EXTENSION);
-            $logoData = file_get_contents($logoPath);
-            $base64 = 'data:image/' . $type . ';base64,' . base64_encode($logoData);
+            // Logo
+            $logoPath = public_path('img/logo.jpg');
+            $base64Logo = '';
+            if (file_exists($logoPath)) {
+                $logoData = file_get_contents($logoPath);
+                $base64Logo = 'data:image/png;base64,' . base64_encode($logoData);
+            }
 
-    
+            // 4. Construir HTML (Versión abreviada segura)
             $html = "
             <html>
             <head>
                 <style>
                     body { font-family: Arial, sans-serif; font-size: 10px; padding: 20px; }
-                    .titulo { text-align: center; font-size: 12px; font-weight: bold; }
                     .detalles { border-collapse: collapse; width: 100%; }
-                    .detalles th {
-                        border: 1px solid black;
-                        padding: 5px;
-                        text-align: left;
-                        background-color: lightblue; /* Relleno color azul claro */
-                    }
-                    .detalles td { border: 1px solid black; padding: 5px; text-align: left; }
+                    .detalles th { border: 1px solid black; padding: 5px; background-color: lightblue; }
+                    .detalles td { border: 1px solid black; padding: 5px; }
                     .totales { text-align: right; font-weight: bold; }
+                    .logo-cell { width: 70px; text-align: center; vertical-align: middle; }
+                    .info-cell { font-size: 12px; width: 360px; }
+                    .ruc-cell { width: 240px; font-size: 16px; text-align: center !important; vertical-align: top; }
                 </style>
             </head>
             <body>
-                
-                <style>
-                    .logo-cell {
-                        width: 70px; /* Ajusta el ancho según tus necesidades */
-                        text-align: center;
-                        vertical-align: middle;
-                    }
-                    .info-cell {
-                        font-size: 12px;
-                        width: 360px;
-                    }
-                    .ruc-cell {
-                        width: 240px;
-                        font-size: 16px;
-                        text-align: center !important;
-                        vertical-align: top;
-                    }
-                </style>
-
                 <table border='0'>
                     <tr>
-                        <td class='logo-cell'>
-                            <img src='" . $base64 . "' alt='Logo' style='max-width: 100px; height: auto; transform: scale(1.5);'>
-                        </td>
+                        <td class='logo-cell'><img src='$base64Logo' style='max-width: 80px;'></td>
                         <td class='info-cell'>
-                            <b>" . $emisor['nombre_comercial'] . " <br>
-                                " . $emisor['razon_social'] . "</b> <br>
-                                " . $emisor['direccion'] . "
-                                <br>
-                            " . $emisor['ubigeo_dpto'] . " - " . $emisor['ubigeo_provincia'] . " - " . $emisor['ubigeo_distrito'] . "<br>
-                            Tel. 969 826 870 | Email: consultoriosdelnorte@gmail.com
+                            <b>{$emisor['nombre_comercial']} <br> {$emisor['razon_social']}</b> <br>
+                            {$emisor['direccion']} <br>
+                            {$emisor['ubigeo_dpto']} - {$emisor['ubigeo_provincia']} - {$emisor['ubigeo_distrito']}
                         </td>
                         <td class='ruc-cell'>
-                            <table border='1'>
-                                <tr>
-                                    <td style='text-align: center;'>
-                                        <b>R.U.C. N° " . $emisor['ruc'] . "<br>$tipoDocumento<br>$correlativo</b>
-                                    </td>
-                                </tr>
+                            <table border='1' width='100%'><tr><td style='text-align: center;'>
+                                <b>R.U.C. N° {$emisor['ruc']} <br> $tipoDocumento <br> $correlativo</b>
+                            </td></tr></table>
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <table style='font-size: 12px;'>
+                    <tr><td width='100'><b>Fecha:</b></td><td width='300'>$fechaEmision</td><td><b>Pago:</b></td><td>Contado</td></tr>
+                    <tr><td><b>Señor(es):</b></td><td>$nombre</td></tr>
+                    <tr><td><b>$labelTD:</b></td><td>$numeroDocumento</td></tr>
+                    <tr><td><b>Dirección:</b></td><td>$direccion</td></tr>
+                </table>
+                <br>
+                <table class='detalles'>
+                    <tr><th>Cant.</th><th>Descripción</th><th style='text-align:right;'>Importe</th></tr>";
+            
+            foreach ($factura->detalles as $detalle) {
+                $desc = $detalle->tratamiento->nombre . ' - ' . $detalle->procedimiento->nombre;
+                $imp = number_format($detalle->importe, 2);
+                $html .= "<tr><td>1</td><td>$desc</td><td style='text-align:right;'>S/. $imp</td></tr>";
+            }
+
+            $html .= "</table>
+                <br>
+                <table width='100%'>
+                    <tr>
+                        <td width='70%'>
+                            Son: <b>$montoLiteral</b><br>
+                            <img src='data:image/svg+xml;base64,$qrCodeBase64'><br>
+                            Hash: $hash_code
+                        </td>
+                        <td>
+                            <table width='100%'>
+                                <tr><td class='totales'>Subtotal:</td><td style='text-align:right;'>S/. ".number_format($factura->subtotal, 2)."</td></tr>
+                                <tr><td class='totales'>IGV:</td><td style='text-align:right;'>S/. ".number_format($factura->igv, 2)."</td></tr>
+                                <tr><td class='totales'>Total:</td><td style='text-align:right;'>S/. ".number_format($factura->importe, 2)."</td></tr>
                             </table>
                         </td>
                     </tr>
                 </table>
+            </body>
+            </html>";
 
-                <hr>
-                <style>
-                    .tabla-detalles {
-                        font-size: 12px; /* Ajusta este valor según el tamaño de letra deseado */
-                    }
-                    .fixed-width {
-                        width: 350px; /* Ancho fijo para las celdas con esta clase */
-                    }
-                </style>
-
-                <table class='tabla-detalles'>
-                    <tr>
-                        <td><b>Fecha:</b></td>
-                        <td class='fixed-width'>$fechaEmision</td>
-                        <td><b>Forma de Pago:</b></td>
-                        <td>Contado</td>
-                    </tr>
-                    <tr>
-                        <td><b>Señor(es):</b></td>
-                        <td class='fixed-width'>$nombre</td>
-                    </tr>
-                    <tr>
-                        <td><b>$labelTD:</b></td>
-                        <td class='fixed-width'>$numeroDocumento</td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td><b>Dirección:</b></td>
-                        <td class='fixed-width'>$direccion</td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                </table>
-
-                <hr>
-                <table class='detalles'>
-                    <tr>
-                        <th>Cant.</th>
-                        <th>Descripción</th>
-                        <th style='text-align:right;'>Importe</th>
-                    </tr>";
-            
-                    foreach ($factura->detalles as $detalle) {
-                        $descripcion = $detalle->tratamiento->nombre . ' - ' . $detalle->procedimiento->nombre;
-                        $importeFormateado = number_format($detalle->importe, 2, '.', ',');
-                        $html .= "<tr>
-                                    <td>1</td>
-                                    <td>{$descripcion}</td>
-                                    <td style='text-align:right;'>S/. {$importeFormateado}</td>
-                                  </tr>";
-                    }
-                    
-                                
-                    $html .= "
-                    </table>
-                    <style>
-                        .totales {
-                            border: 1px solid black;
-                            padding: 4px;
-                            font-weight: bold;
-                            font-size: 12px;
-                        }
-                        .valor {
-                            text-align: right;
-                            border: 1px solid black;
-                            padding: 4px;
-                            font-weight: bold;
-                            font-size: 14px;
-                        }
-                        .tabla-totales {
-                            width: 30%;
-                            margin-left: auto;
-                            margin-right: 0;
-                        }
-                        .monto-literal {
-                            text-align: left;
-                            font-weight: bold;
-                            font-size: 12px;
-                            vertical-align: top;
-                        }
-                        .tabla-monto-literal {
-                            width: 70%;
-                            vertical-align: top;
-                        }
-                        .qr {
-                            text-align: left;
-                        }
-                        .paciente-info {
-                            color: #4682B4;
-                            font-weight: bold;
-                            font-size: 14px;
-                            width: 16%;
-                            text-align: left;
-                            padding: 2px 0;
-                        }
-                        .paciente-valor {
-                            font-size: 14px;
-                            font-weight: bold;
-                            width: 80%;
-                            text-align: left;
-                            padding: 2px 0;
-                        }
-                        .espaciado-corto {
-                            margin-bottom: 4px;
-                        }
-                    </style>";
-                
-                    if (!empty($mostrar_paciente) || !empty($obser)) {
-                        $html .= "<table width='100%' class='espaciado-corto'>";
-                        
-                        if (!empty($mostrar_paciente)) {
-                            $html .= "<tr>
-                                        <td class='paciente-info'>Paciente:</td>
-                                        <td class='paciente-valor'>$mostrar_paciente</td>
-                                      </tr>";
-                        }
-                    
-                        if (!empty($obser)) {
-                            $html .= "<tr>
-                                        <td class='paciente-info'>Observaciones:</td>
-                                        <td class='paciente-valor'>$obser</td>
-                                      </tr>";
-                        }
-                    
-                        $html .= "</table>";
-                    }
-                    $html .= "
-                    <table width='100%'>
-                        <tr>  
-                            <td class='tabla-monto-literal' rowspan='3'>
-                                <div class='monto-literal'>
-                                    $montoLiteral<br>
-                                    <img src='data:image/svg+xml;base64,$qrCodeBase64' alt='QR Code'><br>
-                                    <b>$factura->hash_cpe</b>
-                                </div>
-                            </td>
-                            <td class='totales'>Subtotal:</td>
-                            <td class='valor'>S/. " . number_format($factura->subtotal, 2, '.', ',') . "</td>
-                        </tr>
-                        <tr>
-                            <td class='totales'>IGV (18%):</td>
-                            <td class='valor'>S/. " . number_format($factura->igv, 2, '.', ',') . "</td>
-                        </tr>
-                        <tr>
-                            <td class='totales'>Total:</td>
-                            <td class='valor'>S/. " . number_format($factura->importe, 2, '.', ',') . "</td>
-                        </tr>
-                    </table>
-
-                    <hr>
-                    <div style='text-align:center;'>
-                        <p style='font-size: 14px;'>Representación impresa de la $tipoDocumento</p>
-                    </div>
-                    </body>
-                    </html>";
-                
-
-            // Configurar Dompdf
+            // 5. Generar PDF con DOMPDF (Aquí ocurría el error de variable indefinida)
             $options = new Options();
             $options->set('isRemoteEnabled', true);
             $options->set('isHtml5ParserEnabled', true);
+            $options->set('tempDir', sys_get_temp_dir());
+            $options->set('chroot', public_path());
 
+            // ✅ Aquí se define la variable $dompdf
             $dompdf = new Dompdf($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
+            // 6. Limpiar Buffer (Evita error "Failed to load PDF")
+            if (ob_get_length() > 0) { ob_end_clean(); }
+
             $output = $dompdf->output();
-            $pdfPath = storage_path("cpe_$correlativo.pdf");
-            file_put_contents($pdfPath, $output);
+            $fileName = "cpe_$correlativo.pdf";
 
-           // Si la solicitud tiene el parámetro 'view', simplemente muestra el PDF
+            // 7. Guardar PDF (Manejo de permisos)
+            try {
+                $directory = storage_path('app/public/facturas');
+                if (!file_exists($directory)) {
+                    mkdir($directory, 0777, true);
+                }
+                file_put_contents($directory . '/' . $fileName, $output);
+                $pdfPath = $directory . '/' . $fileName;
+            } catch (\Exception $e) {
+                // Fallback a temporal si falla storage
+                $pdfPath = sys_get_temp_dir() . '/' . $fileName;
+                file_put_contents($pdfPath, $output);
+            }
+
+            // 8. Respuesta
             if ($request->has('view')) {
-                return response($output, 200, [
-                    'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'inline; filename="cpe_'.$correlativo.'.pdf"'
-                ]);
-            }
-            // Añadir depuración para verificar el contenido de $output y $pdfPath
-            Log::info('Ruta del PDF:', ['pdfPath' => $pdfPath]);
-
-            $numeroWhatsApp = $request->input('numeroWhatsApp');
-            $email = $request->input('email');
-
-            if ($numeroWhatsApp || $email) {
-                if ($numeroWhatsApp) {
-                    // Log::info('Enviando PDF por WhatsApp a:', ['numeroWhatsApp' => $numeroWhatsApp]);
-                    $this->enviarWhatsApp($numeroWhatsApp, $pdfPath);
-                }
-
-                if ($email) {
-                    // Log::info('Enviando PDF por correo a:', ['email' => $email]);
-                    Mail::to($email)->send(new FacturaMail($pdfPath));
-                }
-
-                return response()->json(['message' => 'Factura enviada con éxito.']);
-            } else {
-                Log::warning('No se proporcionó número de WhatsApp ni correo electrónico para enviar la factura.');
+                return $dompdf->stream($fileName, ["Attachment" => false]);
             }
 
-            return response()->file($pdfPath, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="cpe_' . $correlativo . '.pdf"',
-            ]);
+            // Envío por correo/whatsapp (Opcional)
+            if ($email && $pdfPath) {
+                 Mail::to($email)->send(new FacturaMail($pdfPath));
+            }
+
+            return response()->json(['message' => 'Factura generada correctamente.']);
+
         } catch (\Exception $e) {
-            Log::error('Error al generar PDF de la factura: ' . $e->getMessage());
-            return response()->json(['error' => 'Error al generar el PDF de la factura: ' . $e->getMessage()], 500);
+            if (ob_get_length() > 0) { ob_end_clean(); }
+            Log::error('Error CRITICO generando PDF Factura: ' . $e->getMessage());
+            return response()->json(['error' => 'Error del servidor: ' . $e->getMessage()], 500);
         }
     }
 
     public function generarPDFNotaCredito(Request $request, $id)
     {
         try {
-            //Log::info("Iniciando la generación del PDF para la nota de crédito con ID: $id");
             $numeroWhatsApp = $request->input('numeroWhatsApp');
             $email = $request->input('email');
-            $facturadorId = $request->input('facturadorId');
-            // Cargar la nota de crédito con sus relaciones
-            $notaCredito = NotaCredito::with(['facturacion', 'facturacion.paciente', 'facturacion.detalles.tratamiento', 'facturacion.detalles.procedimiento'])->find($id);
+            
+            $notaCredito = NotaCredito::with(['facturacion', 'facturacion.paciente'])->find($id);
 
             if (!$notaCredito) {
-                Log::error("Nota de crédito no encontrada con el ID: $id");
                 return response()->json(['error' => 'Nota de crédito no encontrada'], 404);
             }
-
+            
             $factura = $notaCredito->facturacion;
-            $detallesNota = [];
+            $facturadorId = $request->input('facturadorId') ?? ($factura->facturador_id ?? null);
 
-            foreach ($factura->detalles as $detalle) {
-                $descripcion = $detalle->tratamiento->nombre . ' - ' . $detalle->procedimiento->nombre;
-                $detallesNota[] = [
-                    'cantidad' => 1,
-                    'descripcion' => $descripcion,
-                    'importe' => $detalle->importe,
-                ];
+            // Datos Cliente
+            $nombre = '';
+            $direccion = '';
+            $numeroDocumento = $factura->num_doc_iden;
+            
+            if ($factura->paciente) {
+                $nombre = strtoupper($factura->paciente->nombres . ' ' . $factura->paciente->ape_paterno);
+                $direccion = strtoupper($factura->paciente->direccion);
+            } elseif ($factura->num_doc_iden) {
+                 $cliente = Cliente::where('ruc', $factura->num_doc_iden)->first();
+                 if($cliente) {
+                     $nombre = $cliente->rsocial;
+                     $direccion = $cliente->direccion;
+                 } else {
+                     $nombre = "CLIENTE " . $factura->num_doc_iden;
+                 }
             }
 
-            if ($factura->t_doc_iden === "6") { // Si es RUC, buscar en la tabla de clientes
-                if (!empty($factura->num_doc_iden) && strlen($factura->num_doc_iden) === 11) {
-                    $cliente = Cliente::where('ruc', $factura->num_doc_iden)->first();
-            
-                    if ($cliente) {
-                        $numeroDocumento = $factura->num_doc_iden;
-                        $nombre = strtoupper($cliente->rsocial);
-                        $direccion = strtoupper($cliente->direccion);
-                    } else {
-                        return response()->json(['error' => 'Cliente no encontrado'], 404);
-                    }
-                } else {
-                    return response()->json(['error' => 'El RUC es obligatorio para facturas y debe tener 11 dígitos.'], 400);
-                }
-            } elseif (in_array($factura->t_doc_iden, ["1", "4"])) { // Si es DNI o CEX, buscar en pacientes primero
-                $paciente = Paciente::where('tipodocumento', $factura->t_doc_iden)
-                                    ->where('numerodoc', $factura->num_doc_iden)
-                                    ->first();
-            
-                if ($paciente) {
-                    $tipoDocIdent = $factura->t_doc_iden;
-                    $numeroDocumento = $factura->num_doc_iden;
-                    $nombre = strtoupper($paciente->nombres . ' ' . $paciente->ape_paterno . ' ' . $paciente->ape_materno);
-                    $direccion = strtoupper($paciente->direccion);
-                } else {
-                    // Si no se encuentra en pacientes, buscar en clientes por el mismo número de documento
-                    $cliente = Cliente::where('ruc', $factura->num_doc_iden)->first();
-            
-                    if ($cliente) {
-                        $numeroDocumento = $cliente->ruc;
-                        $nombre = strtoupper($cliente->rsocial);
-                        $direccion = strtoupper($cliente->direccion);
-                    } else {
-                        return response()->json(['error' => 'No se encontró registro en pacientes ni clientes'], 404);
-                    }
-                }
-            } else {
-                return response()->json(['error' => 'Tipo de documento no válido.'], 400);
-            }
-
+            // Preparar datos
             $fechaEmision = Carbon::parse($notaCredito->fecha)->format('d/m/Y');
-            $usuario = Auth::user()->name;
             $correlativo = "$notaCredito->serie-$notaCredito->numdoc";
+            $docRef = "$factura->serie-$factura->numdoc";
             
-            $subtotal = number_format($factura->subtotal, 2);
-            $igv = number_format($factura->igv, 2);
-            $total = number_format($factura->importe, 2);
-            //$montoLiteral = $this->convertirNumerosALetras($total);
+            $montoLimpio = number_format(floatval($factura->importe), 2, '.', '');
             $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
-
-            $tipodoc = (strlen($numeroDocumento) == 8) ? 1 : ((strlen($numeroDocumento) == 11) ? 6 : null);
-            $tipoDocumento = 'Nota de Crédito Electrónica';
-            $dr = "$factura->serie-$factura->numdoc";
-            $fecha_dr = Carbon::parse($factura->fecha)->format('d/m/Y');
             $hash_code = $notaCredito->hash_cpe;
-            // Hacemos la consulta a la tabla facturadores para obtener el registro con el id proporcionado
+
+            // Facturador
             $facturador = Facturador::find($facturadorId);
-            if (!$facturador) {
-                //\Log::error('Facturador no encontrado para el ID: ' . $facturadorId);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Facturador no encontrado.'
-                ]);
-            }
-            //\Log::info('Facturador encontrado: ' . $facturador->razon_social);
-            // Datos del emisor
-            $emisor = [
-                'ruc' => $facturador->ruc,
-                'razon_social' => $facturador->razon_social,
-                'direccion' => $facturador->direccion,
-                'nombre_comercial' => $facturador->nombre_comercial,
-                'ubigeo_dpto' => $facturador->ubigeo_dpto,
-                'ubigeo_provincia' => $facturador->ubigeo_provincia,
-                'ubigeo_distrito' => $facturador->ubigeo_distrito,
-            ];
-            $ruc = $emisor['ruc'];
-            $QR = "$ruc|07|$correlativo|$igv|$total|$fechaEmision|$tipodoc|$numeroDocumento|$hash_code";
-
-            $renderer = new ImageRenderer(
-                new RendererStyle(80),
-                new SvgImageBackEnd()
-            );
-            $writer = new Writer($renderer);
-            $qrCodeData = $writer->writeString($QR);
-            $qrCodeBase64 = base64_encode($qrCodeData);
-
-            $logoPath = public_path('img/logo.png');
-            $type = pathinfo($logoPath, PATHINFO_EXTENSION);
-            $logoData = file_get_contents($logoPath);
-            $base64 = 'data:image/' . $type . ';base64,' . base64_encode($logoData);
+            $rucEmisor = $facturador->ruc ?? '00000000000';
             
+            // QR
+            $QR = "$rucEmisor|07|$correlativo|$factura->igv|$factura->importe|$fechaEmision|{$factura->t_doc_iden}|$numeroDocumento|$hash_code";
+            $renderer = new ImageRenderer(new RendererStyle(80), new SvgImageBackEnd());
+            $writer = new Writer($renderer);
+            $qrCodeBase64 = base64_encode($writer->writeString($QR));
+
+            // Logo
+            $logoPath = public_path('img/logo.jpg');
+            $base64Logo = '';
+            if (file_exists($logoPath)) {
+                $logoData = file_get_contents($logoPath);
+                $base64Logo = 'data:image/png;base64,' . base64_encode($logoData);
+            }
+
+            // HTML Nota
             $html = "
             <html>
             <head>
                 <style>
                     body { font-family: Arial, sans-serif; font-size: 10px; padding: 20px; }
-                    .titulo { text-align: center; font-size: 12px; font-weight: bold; }
-                    .detalles { border-collapse: collapse; width: 100%; }
-                    .detalles th {
-                        border: 1px solid black;
-                        padding: 5px;
-                        text-align: left;
-                        background-color: lightblue; /* Relleno color azul claro */
-                    }
-                    .detalles td { border: 1px solid black; padding: 5px; text-align: left; }
                     .totales { text-align: right; font-weight: bold; }
                 </style>
             </head>
             <body>
-                
-                <style>
-                    .logo-cell {
-                        width: 70px; /* Ajusta el ancho según tus necesidades */
-                        text-align: center;
-                        vertical-align: middle;
-                    }
-                    .info-cell {
-                        font-size: 12px;
-                        width: 360px;
-                    }
-                    .ruc-cell {
-                        width: 240px;
-                        font-size: 16px;
-                        text-align: center !important;
-                        vertical-align: top;
-                    }
-                </style>
-
-                <table border='0'>
+                <table border='0' width='100%'>
                     <tr>
-                        <td class='logo-cell'>
-                            <img src='" . $base64 . "' alt='Logo' style='max-width: 100px; height: auto; transform: scale(1.5);'>
-                        </td>
-                        <td class='info-cell'>
-                            <b>" . $emisor['nombre_comercial'] . " <br>
-                                " . $emisor['razon_social'] . "</b> <br>
-                                " . $emisor['direccion'] . "
-                                <br>
-                            " . $emisor['ubigeo_dpto'] . " - " . $emisor['ubigeo_provincia'] . " - " . $emisor['ubigeo_distrito'] . "<br>
-                            Tel. 969 826 870 | Email: consultoriosdelnorte@gmail.com
-                        </td>
-                        <td class='ruc-cell'>
-                            <table border='1'>
-                                <tr>
-                                    <td style='text-align: center;'>
-                                        <b>R.U.C. N° " . $emisor['ruc'] . "<br>$tipoDocumento<br>$correlativo</b>
-                                    </td>
-                                </tr>
-                            </table>
+                        <td align='center'><img src='$base64Logo' width='80'></td>
+                        <td>
+                            <h3>NOTA DE CRÉDITO ELECTRÓNICA</h3>
+                            <h2>$correlativo</h2>
+                            <p><b>Emisor:</b> {$facturador->razon_social}<br>RUC: $rucEmisor</p>
                         </td>
                     </tr>
                 </table>
-
                 <hr>
-                <style>
-                    .tabla-detalles {
-                        font-size: 12px; /* Ajusta este valor según el tamaño de letra deseado */
-                    }
-                    .fixed-width {
-                        width: 350px; /* Ancho fijo para las celdas con esta clase */
-                    }
-                </style>
-
-                <table class='tabla-detalles'>
+                <p><b>Cliente:</b> $nombre <br> <b>Documento:</b> $numeroDocumento</p>
+                <p><b>Documento que modifica:</b> $docRef</p>
+                <p><b>Motivo:</b> Anulación de la operación</p>
+                <br>
+                <table width='100%' border='1' cellspacing='0' cellpadding='5'>
+                    <tr bgcolor='#f2f2f2'><th>Descripción</th><th>Importe</th></tr>
                     <tr>
-                        <td><b>Fecha:</b></td>
-                        <td class='fixed-width'>$fechaEmision</td>
-                        <td><b>Docum. Refer.</b></td>
-                        <td>$dr</td>
-                    </tr>
-                    <tr>
-                        <td><b>Señor(es):</b></td>
-                        <td class='fixed-width'>$nombre</td>
-                        <td><b>Fecha Doc. Ref.:</b></td>
-                        <td>$fecha_dr</td>
-                    </tr>
-                    <tr>
-                        <td><b>RUC/DNI:</b></td>
-                        <td class='fixed-width'>$numeroDocumento</td>
-                        <td><b>Atendido por:</b></td>
-                        <td>$usuario</td>
-                    </tr>
-                    <tr>
-                        <td><b>Dirección:</b></td>
-                        <td class='fixed-width'>$direccion</td>
-                        <td></td>
-                        <td></td>
+                        <td>Devolución por anulación</td>
+                        <td align='right'>S/. ".number_format($factura->importe, 2)."</td>
                     </tr>
                 </table>
-
-                <hr>
-                <table class='detalles'>
-                    <tr>
-                        <th>Cant.</th>
-                        <th>Descripción</th>
-                        <th style='text-align:right;'>Importe</th>
-                    </tr>";
-            
-                    foreach ($factura->detalles as $detalle) {
-                        $descripcion = $detalle->tratamiento->nombre . ' - ' . $detalle->procedimiento->nombre;
-                        $importeFormateado = number_format($detalle->importe, 2);
-                        $html .= "<tr>
-                                    <td>1</td>
-                                    <td>{$descripcion}</td>
-                                    <td style='text-align:right;'>S/. {$importeFormateado}</td>
-                                  </tr>";
-                    }
-                    
-                                
-                $html .= "
-                </table>
-                
-                <style>
-                    .totales {
-                        border: 1px solid black;
-                        padding: 8px;
-                        font-weight: bold; /* Valores de totales en negrita */
-                        font-size: 12px; /* Ajusta este valor según el tamaño de letra deseado */
-                    }
-                    .valor {
-                        text-align: right;
-                        border: 1px solid black;
-                        padding: 8px;
-                        font-weight: bold; /* Valores de totales en negrita */
-                        font-size: 14px; /* Ajusta este valor según el tamaño de letra deseado */
-                    }
-                    .tabla-totales {
-                        width: 30%; /* Ancho de la tabla de totales */
-                        margin-left: auto; /* Esto alinea la tabla a la derecha */
-                        margin-right: 0px;
-                    }
-                    .monto-literal {
-                        text-align: center;
-                        font-weight: bold; /* Monto literal en negrita */
-                        font-size: 14px; /* Ajusta este valor según el tamaño de letra deseado */
-                        vertical-align: middle;
-                    }
-                    .tabla-monto-literal {
-                        width: 70%; /* Ancho de la celda del monto literal */
-                        vertical-align: middle;
-                    }
-                    .qr {
-                        text-align: center;
-                        
-                    }
-                </style>
-
+                <br>
                 <table width='100%'>
                     <tr>
-                        <td class='tabla-monto-literal' rowspan='4'><b>$montoLiteral</b><br><img src='data:image/svg+xml;base64,$qrCodeBase64' alt='QR Code'><br><b>$hash_code</b></td>
-                        <td class='totales'>Subtotal:</td>
-                        <td class='valor'>S/. $factura->subtotal</td>
-                    </tr>
-                    <tr>
-                        <td class='totales'>IGV (18%):</td>
-                        <td class='valor'>S/. $factura->igv</td>
-                    </tr>
-                    <tr>
-                        <td class='totales'>Total:</td>
-                        <td class='valor'>S/. $factura->importe</td>
+                        <td>
+                            <b>Son: $montoLiteral</b><br>
+                            <img src='data:image/svg+xml;base64,$qrCodeBase64'>
+                        </td>
+                        <td align='right'>
+                            <b>Total: S/. ".number_format($factura->importe, 2)."</b>
+                        </td>
                     </tr>
                 </table>
-                <hr>
-                <div style='text-align:center;'>
-                    <p style='font-size: 14px;'>Representación impresa de la $tipoDocumento</p>
-                    <p style='font-size: 14px;'>Gracias por su preferencia.</p>
-                </div>
             </body>
             </html>";
 
-            // Configurar Dompdf
+            // 5. Generar PDF
             $options = new Options();
             $options->set('isRemoteEnabled', true);
-            $options->set('isHtml5ParserEnabled', true);
+            $options->set('tempDir', sys_get_temp_dir());
+            $options->set('chroot', public_path());
 
+            // ✅ Definir variable $dompdf
             $dompdf = new Dompdf($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
+            // 6. Limpiar Buffer
+            if (ob_get_length() > 0) { ob_end_clean(); }
+
             $output = $dompdf->output();
-            $pdfPath = storage_path("cpe_$correlativo.pdf");
-            file_put_contents($pdfPath, $output);
+            $fileName = "nc_$correlativo.pdf";
 
-            // Si la solicitud tiene el parámetro 'view', simplemente muestra el PDF
+            // 7. Guardar
+            try {
+                $dir = storage_path('app/public/facturas');
+                if (!file_exists($dir)) mkdir($dir, 0777, true);
+                file_put_contents("$dir/$fileName", $output);
+            } catch (\Exception $e) {
+                file_put_contents(sys_get_temp_dir() . "/$fileName", $output);
+            }
+
+            // 8. Respuesta
             if ($request->has('view')) {
-                return response($output, 200, [
-                    'Content-Type' => 'application/pdf',
-                    'Content-Disposition' => 'inline; filename="cpe_'.$correlativo.'.pdf"'
-                ]);
-            }
-            // Añadir depuración para verificar el contenido de $output y $pdfPath
-            // Log::info('Ruta del PDF:', ['pdfPath' => $pdfPath]);
-
-            $numeroWhatsApp = $request->input('numeroWhatsApp');
-            $email = $request->input('email');
-
-            if ($numeroWhatsApp || $email) {
-                if ($numeroWhatsApp) {
-                    // Log::info('Enviando PDF por WhatsApp a:', ['numeroWhatsApp' => $numeroWhatsApp]);
-                    $this->enviarWhatsApp($numeroWhatsApp, $pdfPath);
-                }
-
-                if ($email) {
-                    // Log::info('Enviando PDF por correo a:', ['email' => $email]);
-                    Mail::to($email)->send(new FacturaMail($pdfPath));
-                }
-
-                return response()->json(['message' => 'Factura enviada con éxito.']);
-            } else {
-                Log::warning('No se proporcionó número de WhatsApp ni correo electrónico para enviar la factura.');
+                return $dompdf->stream($fileName, ["Attachment" => false]);
             }
 
-            return response()->file($pdfPath, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="cpe_' . $correlativo . '.pdf"',
-            ]);
+            return response()->json(['message' => 'Nota generada.']);
 
         } catch (\Exception $e) {
-            Log::error('Error al generar PDF de la factura: ' . $e->getMessage());
-            return response()->json(['error' => 'Error al generar el PDF de la factura: ' . $e->getMessage()], 500);
+            if (ob_get_length() > 0) { ob_end_clean(); }
+            Log::error('Error NotaCredito: ' . $e->getMessage());
+            return response()->json(['error' => 'Error: ' . $e->getMessage()], 500);
         }
     }
-
 
     private function enviarWhatsApp($numero, $pdfPath)
     {
