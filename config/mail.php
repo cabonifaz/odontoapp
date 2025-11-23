@@ -36,12 +36,12 @@ return [
     'mailers' => [
         'smtp' => [
             'transport' => 'smtp',
-            'host' => gethostbyname(env('MAIL_HOST', 'smtp.gmail.com')),
+            'host' => env('MAIL_HOST', 'smtp.googlemail.com'),
             'port' => env('MAIL_PORT', 587),
             'encryption' => env('MAIL_ENCRYPTION', 'tls'),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            'timeout' =>60,
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
 
             // AGREGAR ESTE BLOQUE PARA SOLUCIONAR TIMEOUTS EN RAILWAY
