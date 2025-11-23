@@ -487,7 +487,7 @@ public function generarPDFFactura(Request $request, $id)
             $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
             // Logo
-            $logoPath = public_path('img/logo.png');
+            $logoPath = public_path('img/logo.jpg');
             $base64Logo = '';
             if (file_exists($logoPath)) {
                 $logoData = file_get_contents($logoPath);
@@ -676,7 +676,7 @@ public function generarPDFFactura(Request $request, $id)
             $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
             // Logo
-            $logoPath = public_path('img/logo.png');
+            $logoPath = public_path('img/logo.jpg');
             $base64Logo = '';
             if (file_exists($logoPath)) {
                 $logoData = file_get_contents($logoPath);
