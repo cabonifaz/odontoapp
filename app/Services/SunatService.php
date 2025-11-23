@@ -12,88 +12,92 @@ class SunatService
 {
     private $firmaPath;
     private $cdrPath;
+    private $xmlPath; // Nueva propiedad para mayor orden
+    private $caCertPath;
     private $certificado;
     private $certPassword;
     private $ws = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
-    //private $ws = "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService?wsdl";
+    //private $ws = "https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService?wsdl"; // Producción
 
     public function __construct()
     {
-        // Usar `public_path` para generar las rutas absolutas correctamente
-        $this->firmaPath = public_path('sunat_files/firma/'); // Ruta para guardar el ZIP firmado
+        // Definir rutas absolutas usando public_path (compatible con la estructura de carpetas de Railway)
+        $this->firmaPath = public_path('sunat_files/firma/');
         $this->cdrPath = public_path('sunat_files/cdr/');
-       
+        $this->xmlPath = public_path('sunat_files/xml/');
+        $this->caCertPath = public_path('sunat_files/cacert.pem');
+
+        // ---------------------------------------------------------
+        // CORRECCIÓN CRÍTICA PARA RAILWAY / DOCKER
+        // ---------------------------------------------------------
+        // Git no sube carpetas vacías. En Railway, estas carpetas no existen
+        // al inicio. Las creamos dinámicamente para evitar error "No such file".
+        if (!file_exists($this->firmaPath)) {
+            mkdir($this->firmaPath, 0775, true);
+        }
+        if (!file_exists($this->cdrPath)) {
+            mkdir($this->cdrPath, 0775, true);
+        }
+        if (!file_exists($this->xmlPath)) {
+            mkdir($this->xmlPath, 0775, true);
+        }
     }
+
     private function obtenerCertificadoYClave($ruc)
     {
-        // Escribir en el log para ver el valor del parámetro ruc
-        //\Log::info('Valor del RUC recibido: ' . $ruc);
-
-        // Consultar la tabla facturadores para obtener la ruta del certificado y la clave
         $facturador = Facturador::where('ruc', $ruc)->first();
         if (!$facturador) {
-            \Log::error('Facturador no encontrado para el RUC: ' . $ruc);
-            throw new \Exception('Facturador no encontrado.');
+            Log::error('Facturador no encontrado para el RUC: ' . $ruc);
+            throw new Exception('Facturador no encontrado.');
         }
 
-        //\Log::info('Facturador encontrado: ' . $facturador->razon_social);
+        // Validar que el archivo del certificado realmente exista en el contenedor
+        $rutaCertificado = public_path($facturador->ruta_certificado);
+        
+        if (!file_exists($rutaCertificado)) {
+             throw new Exception("El archivo de certificado digital (.pfx/.pem) no se encuentra en la ruta: " . $rutaCertificado . ". Verifica que se haya subido al repositorio.");
+        }
 
-        $this->certificado = public_path($facturador->ruta_certificado);
+        $this->certificado = $rutaCertificado;
         $this->certPassword = $facturador->clave_certificado;
-
-        //\Log::info('Ruta del certificado: ' . $this->certificado);
-        //\Log::info('Clave del certificado: ' . $this->certPassword);
     }
 
     public function firmarYEnviar($nombreXml, $nroFactura, $emisor)
     {
         try {
-            // Incluir archivo de firma
-            require_once public_path('sunat_files/signature.php');
-            // Obtener certificado y clave basándose en el RUC del emisor
+            require_once public_path('sunat_files/signature.php'); // Asegúrate que este archivo esté en el repo
+            
             $this->obtenerCertificadoYClave($emisor['ruc']);
-            // Paso 2: Firmar XML
-            $rutaxml = public_path('sunat_files/xml/') . $nombreXml; // Ruta correcta para el XML a firmar
+            
+            // Usar la ruta definida en el constructor para asegurar consistencia
+            $rutaxml = $this->xmlPath . $nombreXml;
 
-            // Verificar si el archivo XML existe antes de firmarlo
             if (!file_exists($rutaxml)) {
-                throw new Exception("El archivo XML no existe en la ruta: " . $rutaxml);
+                throw new Exception("El archivo XML a firmar no existe: " . $rutaxml);
             }
 
-            // Crear instancia de Signature
-            $signature = new \Signature(); // Clase definida en signature.php
-
-            // Firmar el XML
+            $signature = new \Signature();
             $response = $signature->signature_xml("0", $rutaxml, $this->certificado, $this->certPassword);
 
-            // Obtener el hash del XML firmado
             if (isset($response['hash_cpe'])) {
-                $hashCode = $response['hash_cpe'];
-
-                // Actualizar el hash en la base de datos
                 \DB::table('facturaciones')
                     ->where('id', $nroFactura)
-                    ->update(['hash_cpe' => $hashCode]);
+                    ->update(['hash_cpe' => $response['hash_cpe']]);
             } else {
                 throw new Exception("No se pudo obtener el hash del XML firmado.");
             }
 
-            // Paso 3: Crear archivo ZIP
             $rutazip = $this->crearZip($nombreXml, $rutaxml);
 
-            // Paso 4: Preparar mensaje SOAP
             $contenidoZip = base64_encode(file_get_contents($rutazip));
             $xmlEnvio = $this->crearEnvelope($emisor, basename($rutazip), $contenidoZip);
 
-            // Paso 5: Enviar a SUNAT
             $respuestaSunat = $this->enviarASunat($xmlEnvio);
 
-            // Paso 6: Procesar respuesta de SUNAT
-            $resultado = $this->procesarRespuestaSunat($respuestaSunat, $nombreXml, $nroFactura);
+            return $this->procesarRespuestaSunat($respuestaSunat, $nombreXml, $nroFactura);
 
-            return $resultado;
         } catch (Exception $e) {
-            \Log::error('Error: ' . $e->getMessage());
+            Log::error('Error SunatService: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
@@ -101,70 +105,53 @@ class SunatService
     public function firmarYEnviar_Nota($nombreXml, $nroFactura, $emisor)
     {
         try {
-            // Incluir archivo de firma
             require_once public_path('sunat_files/signature.php');
-            // Obtener certificado y clave basándose en el RUC del emisor
             $this->obtenerCertificadoYClave($emisor['ruc']);
-            // Paso 2: Firmar XML
-            $rutaxml = public_path('sunat_files/xml/') . $nombreXml; // Ruta correcta para el XML a firmar
-            // Verificar si el archivo XML existe antes de firmarlo
+            
+            $rutaxml = $this->xmlPath . $nombreXml;
+            
             if (!file_exists($rutaxml)) {
-                throw new Exception("El archivo XML no existe en la ruta: " . $rutaxml);
+                throw new Exception("El archivo XML de la Nota no existe: " . $rutaxml);
             }
 
-            // Crear instancia de Signature
-            $signature = new \Signature(); // Clase definida en signature.php
-
-            // Firmar el XML
+            $signature = new \Signature();
             $response = $signature->signature_xml("0", $rutaxml, $this->certificado, $this->certPassword);
 
-            // Obtener el hash del XML firmado
             if (isset($response['hash_cpe'])) {
-                $hashCode = $response['hash_cpe'];
-
-                // Actualizar el hash en la base de datos
                 \DB::table('nota_credito')
                     ->where('facturacion_id', $nroFactura)
-                    ->update(['hash_cpe' => $hashCode]);
+                    ->update(['hash_cpe' => $response['hash_cpe']]);
             } else {
                 throw new Exception("No se pudo obtener el hash del XML firmado.");
             }
 
-            // Paso 3: Crear archivo ZIP
             $rutazip = $this->crearZip($nombreXml, $rutaxml);
-
-            // Paso 4: Preparar mensaje SOAP
             $contenidoZip = base64_encode(file_get_contents($rutazip));
             $xmlEnvio = $this->crearEnvelope($emisor, basename($rutazip), $contenidoZip);
 
-            // Paso 5: Enviar a SUNAT
             $respuestaSunat = $this->enviarASunat($xmlEnvio);
 
-            // Paso 6: Procesar respuesta de SUNAT
             return $this->procesarRespuestaSunat_Nota($respuestaSunat, $nombreXml, $nroFactura);
         } catch (Exception $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
-    // Método para crear el archivo ZIP
+
     private function crearZip($nombreXml, $rutaxml)
     {
-        // Ruta para guardar el archivo ZIP en la carpeta 'firma' sin la extensión '.xml.zip'
-        $rutazip = $this->firmaPath . basename($nombreXml, '.xml') . '.zip'; // Sin .xml
+        $rutazip = $this->firmaPath . basename($nombreXml, '.xml') . '.zip';
 
-        // Crear el archivo ZIP
         $zip = new \ZipArchive();
-        if ($zip->open($rutazip, \ZipArchive::CREATE) === true) {
-            $zip->addFile($rutaxml, basename($rutaxml)); // Agregar el archivo XML al ZIP
+        if ($zip->open($rutazip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
+            $zip->addFile($rutaxml, basename($rutaxml));
             $zip->close();
         } else {
-            throw new Exception("No se pudo crear el archivo ZIP en la ruta: " . $rutazip);
+            throw new Exception("No se pudo crear el archivo ZIP en: " . $rutazip . ". Verifica permisos de escritura.");
         }
 
-        return $rutazip; // Retornar la ruta del archivo ZIP creado
+        return $rutazip;
     }
 
-    // Método para crear el sobre SOAP
     private function crearEnvelope($emisor, $fileName, $contentFile)
     {
         return <<<XML
@@ -187,7 +174,6 @@ class SunatService
             XML;
     }
 
-    // Método para enviar a SUNAT
     private function enviarASunat($xmlEnvio)
     {
         $ch = curl_init();
@@ -199,100 +185,109 @@ class SunatService
             "Content-type: text/xml; charset=\"utf-8\"",
             "Content-length: " . strlen($xmlEnvio),
         ]);
+        
+        // ---------------------------------------------------------
+        // CORRECCIÓN SSL PARA RAILWAY
+        // ---------------------------------------------------------
+        // Railway usa entornos seguros. Es vital apuntar al CA Bundle correcto
+        // para evitar errores "SSL certificate problem: unable to get local issuer certificate"
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        if (file_exists($this->caCertPath)) {
+            curl_setopt($ch, CURLOPT_CAINFO, $this->caCertPath);
+        } else {
+            // Si no hay CA personalizado, confiamos en el del sistema (Railway suele tenerlos actualizados)
+            // Pero logueamos advertencia
+            Log::warning("No se encontró cacert.pem en " . $this->caCertPath . ". Usando CA del sistema.");
+        }
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
 
         $response = curl_exec($ch);
         if (curl_errno($ch)) {
-            throw new Exception('Error en conexión: ' . curl_error($ch));
+            throw new Exception('Error cURL a SUNAT: ' . curl_error($ch));
         }
         curl_close($ch);
-        \Log::info('Resultado del response: ' . $response);
         return $response;
     }
-   // Método para procesar la respuesta de SUNAT
+
    private function procesarRespuestaSunat($response, $nombreXml, $nroFactura)
     {
         $doc = new \DOMDocument();
-        $doc->loadXML($response);
-        $cdrPath = $this->cdrPath . "R-" . basename($nombreXml, '.xml') . '.zip'; // Corregir nombre del archivo ZIP
+        @$doc->loadXML($response);
+        $cdrPath = $this->cdrPath . "R-" . basename($nombreXml, '.xml') . '.zip';
 
         if ($doc->getElementsByTagName('applicationResponse')->length > 0) {
             
             $cdr = base64_decode($doc->getElementsByTagName('applicationResponse')->item(0)->nodeValue);
             file_put_contents($cdrPath, $cdr);
 
-            // Extraer CDR
             $zip = new \ZipArchive();
             if ($zip->open($cdrPath) === true) {
-                $zip->extractTo($this->cdrPath); // Extraer sin crear subcarpeta
+                $zip->extractTo($this->cdrPath);
                 $zip->close();
             }
 
-            // Eliminar el archivo ZIP después de la extracción
-            unlink($cdrPath);
+            // Intentar borrar el ZIP temporal, pero no fallar si no se puede
+            if(file_exists($cdrPath)) @unlink($cdrPath);
 
-            // Cargar el XML extraído para evaluar las etiquetas cbc:ResponseCode y cbc:Description
             $cdrFile = $this->cdrPath . str_replace('.zip', '.xml', basename($cdrPath));
+            
+            if (!file_exists($cdrFile)) {
+                 throw new Exception("No se pudo encontrar el XML del CDR extraído.");
+            }
+            
             $cdrDoc = new \DOMDocument();
-            $cdrDoc->load($cdrFile);
+            @$cdrDoc->load($cdrFile);
 
-            // Extraer cbc:ResponseCode
             $responseCode = $cdrDoc->getElementsByTagName('ResponseCode')->item(0)->nodeValue ?? null;
-
-            // Extraer cbc:Description
             $description = $cdrDoc->getElementsByTagName('Description')->item(0)->nodeValue ?? null;
 
-            // Evaluar el ResponseCode
             if ($responseCode === "0") {
-                // Aceptada
                 \DB::table('facturaciones')
                     ->where('id', $nroFactura)
                     ->update([
-                        'estado_sunat' => 1, // Comprobante aceptado
-                        'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'), // Fecha actual
+                        'estado_sunat' => 1,
+                        'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
                 return ['success' => true, 'message' => $description ?? 'Comprobante aceptado'];
             } else {
-                // Rechazada
                 \DB::table('facturaciones')
                     ->where('id', $nroFactura)
                     ->update([
-                        'estado_sunat' => 0, // Comprobante rechazado
-                        'descripcion_error' => $description ?? 'Error no identificado', // Guardar descripción del error
-                        'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'), // Fecha actual
+                        'estado_sunat' => 0,
+                        'descripcion_error' => $description ?? 'Error no identificado',
+                        'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
                 return ['success' => false, 'message' => $description ?? 'Error en el comprobante'];
             }
         }
 
-        // Si no se encontró la etiqueta applicationResponse
         $faultCode = $doc->getElementsByTagName('faultcode')->item(0)->nodeValue ?? 'Desconocido';
         $faultString = $doc->getElementsByTagName('faultstring')->item(0)->nodeValue ?? 'Error no identificado';
-        throw new Exception("Error $faultCode: $faultString");
+        
+        // Loguear para depuración en Railway Dashboard
+        Log::error("SUNAT Fault: $faultCode - $faultString");
+        
+        throw new Exception("Error SUNAT $faultCode: $faultString");
     }
 
-    
    public function firmarYEnviar_Baja($nombreXml, $nroFactura, $emisor)
     {
         try {
-            // Verificar si ya existe un ticket en la BD
             $factura = \DB::table('facturaciones')->where('id', $nroFactura)->first();
 
+            // Si ya tiene ticket, solo consultamos (lógica de reintento)
             if ($factura && !empty($factura->ticket_baja)) {
-                // Si ya hay un ticket, solo consultamos su estado
-                //\Log::info("El ticket ya existe ({$factura->ticket_baja}), consultando estado...");
                 $respuestaEstado = $this->consultarEstadoSunat($factura->ticket_baja, $emisor);
                 return $this->procesarRespuestaSunatBaja($respuestaEstado, $nombreXml, $nroFactura);
             }
 
-            // Continuar con el proceso normal si no hay ticket
             require_once public_path('sunat_files/signature.php');
-            // Obtener certificado y clave basándose en el RUC del emisor
             $this->obtenerCertificadoYClave($emisor['ruc']);
-            $rutaxml = public_path('sunat_files/xml/') . $nombreXml;
+            
+            $rutaxml = $this->xmlPath . $nombreXml;
 
             if (!file_exists($rutaxml)) {
-                throw new Exception("El archivo XML no existe en la ruta: " . $rutaxml);
+                throw new Exception("El archivo XML de baja no existe: " . $rutaxml);
             }
 
             $signature = new \Signature();
@@ -302,45 +297,29 @@ class SunatService
                 throw new Exception("No se pudo obtener el hash del XML firmado.");
             }
 
-            $hashCode = $response['hash_cpe'];
+            \DB::table('facturaciones')->where('id', $nroFactura)->update(['hash_cpe_baja' => $response['hash_cpe']]);
 
-            // Actualizar en la BD el hash del CPE
-            \DB::table('facturaciones')->where('id', $nroFactura)->update(['hash_cpe_baja' => $hashCode]);
-
-            // Crear el ZIP
             $rutazip = $this->crearZip($nombreXml, $rutaxml);
-
-            if (!file_exists($rutazip)) {
-                throw new Exception("No se pudo generar el archivo ZIP.");
-            }
-
             $contenidoZip = base64_encode(file_get_contents($rutazip));
             $xmlEnvio = $this->crearEnvelope_Baja($emisor, basename($rutazip), $contenidoZip);
 
-            //\Log::info('XML de Envío: ' . $xmlEnvio);
-
-            // Enviar a SUNAT y obtener el ticket
             $ticket = $this->enviarASunat_Baja($xmlEnvio);
 
             if (empty($ticket)) {
                 throw new Exception("No se recibió un ticket de SUNAT.");
             }
 
-            // Guardar ticket en la BD
             \DB::table('facturaciones')->where('id', $nroFactura)->update(['ticket_baja' => $ticket]);
 
-            //sleep(5); // Esperar antes de consultar el estado
-
-            // Consultar estado en SUNAT
+            // Consultar estado inmediatamente
             $respuestaEstado = $this->consultarEstadoSunat($ticket, $emisor);
 
             return $this->procesarRespuestaSunatBaja($respuestaEstado, $nombreXml, $nroFactura);
         } catch (Exception $e) {
-            \Log::error('Error al anular el documento: ' . $e->getMessage());
+            Log::error('Error Baja: ' . $e->getMessage());
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
-    
     
    private function crearEnvelope_Baja($emisor, $fileName, $contentFile)
    {
@@ -375,27 +354,36 @@ class SunatService
            "Content-type: text/xml; charset=\"utf-8\"",
            "Content-length: " . strlen($xmlEnvio),
        ]);
+       
        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+       if (file_exists($this->caCertPath)) {
+           curl_setopt($ch, CURLOPT_CAINFO, $this->caCertPath);
+       }
+       curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
    
        $response = curl_exec($ch);
        if (curl_errno($ch)) {
-           throw new Exception('Error en conexión: ' . curl_error($ch));
+           throw new Exception('Error conexión Baja: ' . curl_error($ch));
        }
        curl_close($ch);
    
-       //\Log::info('Respuesta de SUNAT: ' . $response);
-   
        $doc = new \DOMDocument();
-       $doc->loadXML($response);
+       @$doc->loadXML($response);
    
        $ticketNode = $doc->getElementsByTagName('ticket')->item(0);
        if ($ticketNode) {
            return $ticketNode->nodeValue;
        }
+       
+       // Verificar si es error
+       $faultString = $doc->getElementsByTagName('faultstring')->item(0)->nodeValue ?? null;
+       if($faultString) {
+           throw new Exception("SUNAT Error (Ticket): " . $faultString);
+       }
    
        return null;
    }   
-   // Método para consultar el estado en SUNAT
+
    public function consultarEstadoSunat($ticket, $emisor) {
        $statusXml = '<?xml version="1.0" encoding="UTF-8"?>
        <soapenv:Envelope 
@@ -426,77 +414,66 @@ class SunatService
            "Content-Type: text/xml; charset=\"utf-8\"",
            "Content-Length: " . strlen($statusXml)
        ]);
+       
        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+       if (file_exists($this->caCertPath)) {
+           curl_setopt($ch, CURLOPT_CAINFO, $this->caCertPath);
+       }
+       curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
    
        $response = curl_exec($ch);
        if (curl_errno($ch)) {
-           throw new Exception('Error en conexión: ' . curl_error($ch));
+           throw new Exception('Error conexión Status: ' . curl_error($ch));
        }
        curl_close($ch);
-       //\Log::info('Respuesta de SUNAT Consultar estado: ' . $response);
        return $response;
    }
    
     public function procesarRespuestaSunatBaja($response, $nombreXml, $nroFactura)
     {
-        Log::info("Inicio de procesamiento de la respuesta de SUNAT para la baja de la factura: $nroFactura");
+        Log::info("Procesando respuesta Baja ID: $nroFactura");
 
         if (strpos($response, '<') === false) {
-            //Log::error("La respuesta de SUNAT no contiene un XML válido: " . $response);
-            throw new Exception("La respuesta no contiene un XML válido: " . $response);
+            throw new Exception("Respuesta inválida de SUNAT (No XML)");
         }
 
         $doc = new \DOMDocument();
-        $doc->loadXML($response);
+        @$doc->loadXML($response);
 
-        // 🔹 Verificar si existe el tag <content> y extraer el CDR
         if ($doc->getElementsByTagName('content')->length > 0) {
-            //Log::info("Se encontró el contenido del CDR en la respuesta.");
             
             $cdr = base64_decode($doc->getElementsByTagName('content')->item(0)->nodeValue);
             $cdrPath = $this->cdrPath . "R-" . basename($nombreXml, '.xml') . '.zip';
             
             file_put_contents($cdrPath, $cdr);
-            //Log::info("CDR guardado en: " . $cdrPath);
 
-            // 🔹 Intentar extraer el ZIP
             $zip = new \ZipArchive();
             if ($zip->open($cdrPath) === true) {
                 $zip->extractTo($this->cdrPath);
                 $zip->close();
-                //Log::info("CDR extraído exitosamente en: " . $this->cdrPath);
-            } else {
-                //Log::error("Error al abrir el archivo ZIP del CDR.");
             }
-
-            unlink($cdrPath);
-        } else {
-            Log::warning("No se encontró el contenido del CDR en la respuesta de SUNAT.");
+            if(file_exists($cdrPath)) @unlink($cdrPath);
         }
 
-        // 🔹 Verificar el estado del CDR
         $estado = 'Error desconocido';
         if ($doc->getElementsByTagName('statusCode')->length > 0) {
             $estado = $doc->getElementsByTagName('statusCode')->item(0)->nodeValue;
         }
-        //Log::info("Estado recibido de SUNAT: " . $estado);
 
-        // 🔹 Evaluar estados de la SUNAT
+        $bajaExitosa = 0;
+        $msg = "Estado: $estado";
+
         if ($estado === '0') {
-            //Log::info("El comprobante ha sido anulado exitosamente.");
-            $bajaExitosa = 1;
+            $bajaExitosa = 1; // Exito
+            $msg = "Baja ACEPTADA correctamente.";
         } elseif ($estado === '98') {
-            //Log::warning("El comprobante aún está en proceso.");
-            $bajaExitosa = 2;
+            $bajaExitosa = 2; // En Proceso
+            $msg = "Baja EN PROCESO. Verifique más tarde.";
         } elseif ($estado === '99') {
-            //Log::error("Error en la baja del comprobante. Verificar el CDR.");
-            $bajaExitosa = 2;
-        } else {
-            //Log::warning("Estado desconocido recibido: " . $estado);
-            $bajaExitosa = 2;
+            $bajaExitosa = 0; // Error
+            $msg = "Baja RECHAZADA o con errores.";
         }
 
-        // 🔹 Guardar resultado en la base de datos
         \DB::table('facturaciones')
             ->where('id', $nroFactura)
             ->update([
@@ -504,53 +481,46 @@ class SunatService
                 'fecha_baja' => Carbon::now()->format('Y-m-d H:i:s'),
             ]);
 
-        //Log::info("Registro de la factura actualizado en la base de datos.");
-
-        return ['success' => true, 'message' => 'Comprobante procesado', 'estado_cdr' => $estado];
+        return ['success' => ($bajaExitosa !== 0), 'message' => $msg, 'estado_cdr' => $estado];
     }
        
     private function procesarRespuestaSunat_Nota($response, $nombreXml, $nroFactura)
     {
         $doc = new \DOMDocument();
-        $doc->loadXML($response);
-        $cdrPath = $this->cdrPath . "R-" . basename($nombreXml, '.xml') . '.zip'; // Corregir nombre del archivo ZIP
+        @$doc->loadXML($response);
+        $cdrPath = $this->cdrPath . "R-" . basename($nombreXml, '.xml') . '.zip';
 
         if ($doc->getElementsByTagName('applicationResponse')->length > 0) {
             $cdr = base64_decode($doc->getElementsByTagName('applicationResponse')->item(0)->nodeValue);
             file_put_contents($cdrPath, $cdr);
 
-            // Extraer CDR
             $zip = new \ZipArchive();
             if ($zip->open($cdrPath) === true) {
-                $zip->extractTo($this->cdrPath); // Extraer sin subcarpeta
+                $zip->extractTo($this->cdrPath);
                 $zip->close();
             }
+            if(file_exists($cdrPath)) @unlink($cdrPath);
 
-            // Eliminar el archivo ZIP después de la extracción
-            unlink($cdrPath);
-
-            // Cargar el XML extraído para evaluar las etiquetas cbc:ResponseCode y cbc:Description
             $cdrFile = $this->cdrPath . str_replace('.zip', '.xml', basename($cdrPath));
+            
+            if (!file_exists($cdrFile)) {
+                 throw new Exception("XML del CDR Nota no encontrado.");
+            }
+
             $cdrDoc = new \DOMDocument();
-            $cdrDoc->load($cdrFile);
+            @$cdrDoc->load($cdrFile);
 
-            // Extraer cbc:ResponseCode
             $responseCode = $cdrDoc->getElementsByTagName('ResponseCode')->item(0)->nodeValue ?? null;
-
-            // Extraer cbc:Description
             $description = $cdrDoc->getElementsByTagName('Description')->item(0)->nodeValue ?? null;
 
-            // Evaluar el ResponseCode
             if ($responseCode === "0") {
-                // Nota aceptada
                 \DB::table('nota_credito')
                     ->where('facturacion_id', $nroFactura)
                     ->update([
-                        'estado_sunat' => 1, // Nota aceptada
-                        'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'), // Fecha actual
+                        'estado_sunat' => 1,
+                        'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
 
-                // Actualizar estado de la factura asociada
                 \DB::table('facturaciones')
                     ->where('id', $nroFactura)
                     ->update([
@@ -560,12 +530,11 @@ class SunatService
 
                 return ['success' => true, 'message' => $description ?? 'Nota aceptada exitosamente'];
             } else {
-                // Nota rechazada
                 \DB::table('nota_credito')
                     ->where('facturacion_id', $nroFactura)
                     ->update([
-                        'estado_sunat' => 0, // Nota rechazada
-                        'descripcion_error' => $description ?? 'Error desconocido', // Guardar descripción del error
+                        'estado_sunat' => 0,
+                        'descripcion_error' => $description ?? 'Error desconocido',
                         'fecha_cdr' => Carbon::now()->format('Y-m-d H:i:s'),
                     ]);
 
@@ -573,10 +542,9 @@ class SunatService
             }
         }
 
-        // Manejo de errores en la respuesta
         $faultCode = $doc->getElementsByTagName('faultcode')->item(0)->nodeValue ?? 'Desconocido';
         $faultString = $doc->getElementsByTagName('faultstring')->item(0)->nodeValue ?? 'Error no identificado';
+        Log::error("Error SOAP NotaCredito: $faultCode - $faultString");
         throw new Exception("Error $faultCode: $faultString");
     }
-
 }
