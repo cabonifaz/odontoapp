@@ -7,7 +7,6 @@
     <form id="facturacion-form" action="{{ route('facturacion.store') }}" method="POST">
         @csrf
         <div class="row">
-            <!-- Card 1: Datos del Comprobante -->
             <div class="col-md-6">
                 <div class="card mt-0 shadow-sm border-primary">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -26,7 +25,6 @@
                             @endif
                     </div>
                     <div class="card-body">
-                        <!-- Tipo Doc, Serie, Correlativo, Médicos, Fecha -->
                         <div class="row mt-0">
                             <div class="col-md-4 form-group">
                                 <label for="tipodoc">Tipo Doc.</label>
@@ -90,14 +88,12 @@
                 </div>
             </div>
 
-            <!-- Card 2: Datos del Paciente -->
             <div class="col-md-6">
                 <div class="card mt-0 shadow-sm border-primary">
                     <div class="card-header bg-primary text-white">
                         <h5>Datos del Cliente</h5>
                     </div>
                     <div class="card-body">
-                        <!-- Paciente -->
                         <div class="row mt-3 align-items-center">
                             <div class="col-md-2">
                                 <label for="buscar-paciente" class="form-label">Paciente:</label>
@@ -110,7 +106,6 @@
                                 <ul id="resultados-busqueda" class="resultados-busqueda" style="display: none;"></ul>
                             </div>
                         </div>
-                        <!-- Título antes de RUC -->
                         <div class="row mt-3 align-items-center">
                             <div class="col-md-12">
                                 <h5 style="font-weight: bold; text-decoration: underline;">Comprobante a nombre de:</h5>
@@ -144,7 +139,6 @@
                             </div>
                         </div>
 
-                        <!-- Razón Social -->
                         <div class="row mt-3 align-items-center">
                             <div class="col-md-2">
                                 <label for="razon_social" style="font-size: 14px;">RazónSocial</label>
@@ -153,7 +147,6 @@
                                 <input type="text" id="razon_social" name="razon_social" class="form-control">
                             </div>
                         </div>
-                        <!-- Dirección -->
                         <div class="row mt-3 align-items-center">
                             <div class="col-md-2">
                                 <label for="direccion" style="font-size: 14px;">Dirección</label>
@@ -162,7 +155,6 @@
                                 <input type="text" id="direccion" name="direccion" class="form-control">
                             </div>
                         </div>
-                        <!-- Checkbox para mostrar el nombre del paciente en el comprobante -->
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="mostrarNombrePaciente" name="mostrarNombrePaciente">
                             <label class="form-check-label fw-bold text-primary" for="mostrarNombrePaciente">
@@ -174,7 +166,6 @@
             </div>
         </div>
 
-        <!-- Card 3: Detalle del Comprobante -->
         <div class="row mt-0">
             <div class="col-md-9">
                 <div class="card mt-0 shadow-sm border-primary">
@@ -209,7 +200,6 @@
                     </div>
                 </div>
             </div>
-            <!-- Card 4: Detalle de Montos -->
             <div class="col-md-3">
                 <div class="card mt-0 shadow-sm border-primary">
                     <div class="card-header bg-primary text-white">
@@ -257,7 +247,6 @@
 
 @section('js')
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<!-- Incluyendo SweetAlert desde un CDN -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
@@ -863,11 +852,11 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log("id tipo doc cli",tipodociden);
 
             Swal.fire({
-                title: "¿Confirmar Facturación y envío a SUNAT?",
-                text: "¿Estás seguro de registrar y enviar a SUNAT este comprobante? ¿Ha verificado que los datos sean correctos?",
+                title: "¿Confirmar Facturación?",
+                text: "¿Estás seguro de registrar este comprobante? ¿Ha verificado que los datos sean correctos?",
                 icon: "warning",
                 showCancelButton: true,
-                confirmButtonText: "Sí, Guardar y Enviar a SUNAT",
+                confirmButtonText: "Sí, Guardar",
                 cancelButtonText: "Cancelar"
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -891,6 +880,23 @@ document.addEventListener("DOMContentLoaded", function () {
                     })
                     .then(data => {
                         if (data.success) {
+                            
+                            // ---------------------------------------------------------
+                            // CORRECCIÓN: BLOQUEAR ENVÍO A SUNAT SI ES NOTA DE VENTA
+                            // ---------------------------------------------------------
+                            if (tipodoc === "04") {
+                                Swal.fire({
+                                    title: "Éxito",
+                                    text: "Nota de Venta registrada correctamente. (Documento Interno - No se envía a SUNAT)",
+                                    icon: "success"
+                                }).then(() => {
+                                    // Recargar la página para una nueva venta
+                                    window.location.reload(); 
+                                });
+                                return; // DETIENE EL CÓDIGO AQUÍ (No ejecuta el bloque siguiente)
+                            }
+                            // ---------------------------------------------------------
+
                             const facturaId = data.factura_id; // Capturar el ID de la factura
                             const facturadorId = document.querySelector("#facturador_id").value;
                             
@@ -915,7 +921,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
                     })
                     .then(xmlData => {
-                        if (xmlData.success) {
+                        if (xmlData && xmlData.success) {
                             const facturadorId = document.querySelector("#facturador_id").value;
                             Swal.fire({
                                 title: "Éxito",
@@ -925,7 +931,7 @@ document.addEventListener("DOMContentLoaded", function () {
                                 // Redirigir a la bandeja de SUNAT con el facturador_id
                                 window.location.href = `{{ route('facturacion.bandejasunat') }}?facturador_id=${facturadorId}`;
                             });
-                        } else {
+                        } else if (xmlData) {
                             throw new Error(xmlData.message || "Error al enviar el comprobante a SUNAT.");
                         }
                     })
@@ -936,6 +942,10 @@ document.addEventListener("DOMContentLoaded", function () {
                             icon: "error"
                         });
                         console.error("Error:", error);
+                        // Reactivar botón en caso de error
+                        const btnGuardar = document.getElementById("btn-guardar");
+                        btnGuardar.disabled = false;
+                        btnGuardar.innerHTML = 'Guardar';
                     });
                 }
             });
@@ -1002,13 +1012,38 @@ document.addEventListener("DOMContentLoaded", function () {
                     $('#direccion').val(`${data.direccion}`);
                     guardarClienteRuc(data); // Solo guarda el cliente y deja que el flujo continúe
                 } else {
-                    Swal.fire('Advertencia', 'No se encontraron datos para el RUC proporcionado', 'warning');
+                    usarDatosGenericos(ruc, 'Advertencia: RUC no encontrado en API. Se registrará con nombre genérico.');
                 }
             },
             error: function() {
-                Swal.fire('Error', 'Ocurrió un error al buscar el RUC en la API.', 'error');
+                usarDatosGenericos(ruc, 'Error de conexión con API. Se registrará con nombre genérico.');
             }
         });
+    }
+
+    // Función auxiliar para manejar el guardado genérico y evitar repetir código
+    function usarDatosGenericos(ruc, mensaje) {
+        // Definir datos por defecto
+        const datosGenericos = {
+            razonsocial: 'CLIENTE - ' + ruc,
+            direccion: '-'
+        };
+
+        // Llenar los inputs visualmente para que el usuario pueda editar si desea
+        $('#razon_social').val(datosGenericos.razonsocial);
+        $('#direccion').val(datosGenericos.direccion);
+
+        // Mostrar aviso discreto
+        Swal.fire({
+            icon: 'info',
+            title: 'Guardado Automático',
+            text: mensaje,
+            timer: 2000,
+            showConfirmButton: false
+        });
+
+        // Guardar en la base de datos inmediatamente
+        guardarClienteRuc(datosGenericos);
     }
 
     function guardarClienteRuc(datosClienteRuc) {

@@ -45,7 +45,7 @@ class SunatController extends Controller
     
         // Consultar las facturaciones con las fechas actuales y los facturador_id obtenidos
         $facturaciones = Facturacion::with(['cliente', 'paciente'])
-            ->whereIn('tipodoc', ['01', '03'])
+            ->whereIn('tipodoc', ['01', '03', '04'])
             ->whereDate('fecha', '>=', $fechaInicio)
             ->whereDate('fecha', '<=', $fechaFin)
             ->when($facturadorId, function($query) use ($facturadorId) {

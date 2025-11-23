@@ -429,21 +429,20 @@ public function generarPDFFactura(Request $request, $id)
             $numeroWhatsApp = $request->input('numeroWhatsApp');
             $email = $request->input('email');
 
-            // 1. Cargar Factura con relaciones
+            // 1. Cargar Factura
             $factura = Facturacion::with(['paciente', 'detalles.tratamiento', 'detalles.procedimiento'])->find($id);
 
             if (!$factura) {
                 return response()->json(['error' => 'Factura no encontrada'], 404);
             }
 
-            // Priorizar el facturador enviado, si no, usar el de la factura
             $facturadorId = $request->input('facturadorId') ?? ($factura->facturador_id ?? null);
 
             // 2. Lógica de Cliente / Paciente
             $nombre = '';
             $direccion = '';
-            $tipoDocIdent = $factura->t_doc_iden;
             $numeroDocumento = $factura->num_doc_iden;
+            $tipoDocIdent = $factura->t_doc_iden;
 
             if ($factura->t_doc_iden === "6") { // RUC
                 if (!empty($factura->num_doc_iden) && strlen($factura->num_doc_iden) === 11) {
@@ -455,7 +454,7 @@ public function generarPDFFactura(Request $request, $id)
                         $nombre = "CLIENTE RUC " . $factura->num_doc_iden; 
                     }
                 }
-            } elseif (in_array($factura->t_doc_iden, ["1", "4", "7", "0"])) { // DNI, CEX, PAS, OTROS
+            } elseif (in_array($factura->t_doc_iden, ["1", "4", "7", "0"])) { 
                 if ($factura->paciente) {
                     $nombre = strtoupper($factura->paciente->nombres . ' ' . $factura->paciente->ape_paterno . ' ' . $factura->paciente->ape_materno);
                     $direccion = strtoupper($factura->paciente->direccion);
@@ -475,49 +474,39 @@ public function generarPDFFactura(Request $request, $id)
                 }
             }
 
-            // 3. Preparar datos del PDF
+            // 3. Preparar datos
             $fechaEmision = Carbon::parse($factura->fecha)->format('d/m/Y');
             $correlativo = "$factura->serie-$factura->numdoc";
-            
             $montoLimpio = number_format(floatval($factura->importe), 2, '.', '');
             $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
 
             $tipodoc = (strlen($numeroDocumento) == 11) ? 6 : $tipoDocIdent;
             $labelTD = match((string)$tipodoc) { '1' => 'DNI', '4' => 'CEX', '6' => 'RUC', '7' => 'PAS', default => 'DOC' };
-            
             $tipoDocumento = ($factura->tipodoc == '01') ? 'Factura Electrónica' : 'Boleta de Venta Electrónica';
             $hash_code = $factura->hash_cpe;
 
-            // Obtener Facturador
-            $facturador = Facturador::find($facturadorId);
-            // Fallback si no existe
-            if (!$facturador) $facturador = Facturador::first();
+            $facturador = Facturador::find($facturadorId) ?? Facturador::first();
 
             $emisor = [
-                'ruc' => $facturador->ruc ?? '00000000000',
-                'razon_social' => $facturador->razon_social ?? 'EMPRESA POR DEFECTO',
-                'direccion' => $facturador->direccion ?? 'DIRECCION POR DEFECTO',
-                'nombre_comercial' => $facturador->nombre_comercial ?? '',
-                'ubigeo_dpto' => $facturador->ubigeo_dpto ?? '',
-                'ubigeo_provincia' => $facturador->ubigeo_provincia ?? '',
-                'ubigeo_distrito' => $facturador->ubigeo_distrito ?? '',
+                'ruc' => $facturador->ruc,
+                'razon_social' => $facturador->razon_social,
+                'direccion' => $facturador->direccion,
+                'nombre_comercial' => $facturador->nombre_comercial,
+                'ubigeo_dpto' => $facturador->ubigeo_dpto,
+                'ubigeo_provincia' => $facturador->ubigeo_provincia,
+                'ubigeo_distrito' => $facturador->ubigeo_distrito,
             ];
 
-            // Generar QR
+            // QR
             $QR = "{$emisor['ruc']}|$factura->tipodoc|$correlativo|$factura->igv|$factura->importe|$fechaEmision|$tipodoc|$numeroDocumento|$hash_code";
             $renderer = new ImageRenderer(new RendererStyle(80), new SvgImageBackEnd());
             $writer = new Writer($renderer);
             $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
-            // Logo
             $logoPath = public_path('img/logo.jpg');
-            $base64Logo = '';
-            if (file_exists($logoPath)) {
-                $logoData = file_get_contents($logoPath);
-                $base64Logo = 'data:image/png;base64,' . base64_encode($logoData);
-            }
+            $base64Logo = file_exists($logoPath) ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath)) : '';
 
-            // 4. Construir HTML
+            // 4. HTML
             $html = "
             <html>
             <head>
@@ -540,7 +529,8 @@ public function generarPDFFactura(Request $request, $id)
                         <td class='info-cell'>
                             <b>{$emisor['nombre_comercial']} <br> {$emisor['razon_social']}</b> <br>
                             {$emisor['direccion']} <br>
-                            {$emisor['ubigeo_dpto']} - {$emisor['ubigeo_provincia']} - {$emisor['ubigeo_distrito']}
+                            {$emisor['ubigeo_dpto']} - {$emisor['ubigeo_provincia']} - {$emisor['ubigeo_distrito']} <br>
+                            Tel. 969 826 870 | Email: evolutiondentalcenter@gmail.com
                         </td>
                         <td class='ruc-cell'>
                             <table border='1' width='100%'><tr><td style='text-align: center;'>
@@ -591,45 +581,39 @@ public function generarPDFFactura(Request $request, $id)
             $options = new Options();
             $options->set('isRemoteEnabled', true);
             $options->set('isHtml5ParserEnabled', true);
-            $options->set('tempDir', sys_get_temp_dir()); 
-            $options->set('chroot', public_path()); 
+            $options->set('tempDir', sys_get_temp_dir());
+            $options->set('chroot', public_path());
 
             $dompdf = new Dompdf($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
-            // 6. Limpieza de Búfer (CRÍTICO)
-            if (ob_get_length() > 0) {
-                ob_end_clean();
-            }
+            if (ob_get_length() > 0) ob_end_clean();
 
             $output = $dompdf->output();
             $fileName = "cpe_$correlativo.pdf";
 
-            // 7. Guardar Archivo
+            // Guardar
             try {
                 $directory = storage_path('app/public/facturas');
-                if (!file_exists($directory)) {
-                    mkdir($directory, 0777, true);
-                }
+                if (!file_exists($directory)) mkdir($directory, 0777, true);
                 $pdfPath = $directory . '/' . $fileName;
                 file_put_contents($pdfPath, $output);
-            } catch (\Exception $eSave) {
+            } catch (\Exception $e) {
                 $pdfPath = sys_get_temp_dir() . '/' . $fileName;
                 file_put_contents($pdfPath, $output);
             }
 
-            // 8. Respuesta
             if ($request->has('view')) {
                 return $dompdf->stream($fileName, ["Attachment" => false]);
             }
 
-            if ($numeroWhatsApp || $email) {
-                if ($email) {
-                    Mail::to($email)->send(new FacturaMail($pdfPath));
-                }
-                return response()->json(['message' => 'Factura enviada con éxito.']);
+            if ($email) {
+                // ASUNTO DINÁMICO: "Factura" o "Boleta"
+                $tituloCorreo = ($factura->tipodoc == '01' ? 'Factura Electrónica' : 'Boleta de Venta') . ' - ' . $correlativo;
+                Mail::to($email)->send(new FacturaMail($pdfPath, $tituloCorreo));
+                return response()->json(['message' => 'Documento enviado con éxito.']);
             }
 
             return response()->file($pdfPath, [
@@ -638,9 +622,9 @@ public function generarPDFFactura(Request $request, $id)
             ]);
 
         } catch (\Exception $e) {
-            if (ob_get_length() > 0) { ob_end_clean(); }
-            Log::error('Error CRITICO PDF Factura: ' . $e->getMessage());
-            return response()->json(['error' => 'Error del servidor: ' . $e->getMessage()], 500);
+            if (ob_get_length() > 0) ob_end_clean();
+            Log::error('Error PDF Factura: ' . $e->getMessage());
+            return response()->json(['error' => 'Error: ' . $e->getMessage()], 500);
         }
     }
 
@@ -659,7 +643,6 @@ public function generarPDFFactura(Request $request, $id)
             $factura = $notaCredito->facturacion;
             $facturadorId = $request->input('facturadorId') ?? ($factura->facturador_id ?? null);
 
-            // Datos Cliente
             $nombre = '';
             $direccion = '';
             $numeroDocumento = $factura->num_doc_iden;
@@ -677,7 +660,6 @@ public function generarPDFFactura(Request $request, $id)
                  }
             }
 
-            // Datos Nota
             $fechaEmision = Carbon::parse($notaCredito->fecha)->format('d/m/Y');
             $correlativo = "$notaCredito->serie-$notaCredito->numdoc";
             $docRef = "$factura->serie-$factura->numdoc";
@@ -686,27 +668,17 @@ public function generarPDFFactura(Request $request, $id)
             $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
             $hash_code = $notaCredito->hash_cpe;
 
-            // Facturador
-            $facturador = Facturador::find($facturadorId);
-            if (!$facturador) $facturador = Facturador::first();
+            $facturador = Facturador::find($facturadorId) ?? Facturador::first();
+            $rucEmisor = $facturador->ruc;
             
-            $rucEmisor = $facturador->ruc ?? '00000000000';
-            
-            // QR
             $QR = "$rucEmisor|07|$correlativo|$factura->igv|$factura->importe|$fechaEmision|{$factura->t_doc_iden}|$numeroDocumento|$hash_code";
             $renderer = new ImageRenderer(new RendererStyle(80), new SvgImageBackEnd());
             $writer = new Writer($renderer);
             $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
-            // Logo
             $logoPath = public_path('img/logo.jpg');
-            $base64Logo = '';
-            if (file_exists($logoPath)) {
-                $logoData = file_get_contents($logoPath);
-                $base64Logo = 'data:image/png;base64,' . base64_encode($logoData);
-            }
+            $base64Logo = file_exists($logoPath) ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath)) : '';
 
-            // HTML Nota
             $html = "
             <html>
             <head>
@@ -724,6 +696,7 @@ public function generarPDFFactura(Request $request, $id)
                             <h3>NOTA DE CRÉDITO ELECTRÓNICA</h3>
                             <h2>$correlativo</h2>
                             <p><b>Emisor:</b> {$facturador->razon_social}<br>RUC: $rucEmisor</p>
+                            <p>Email: evolutiondentalcenter@gmail.com</p>
                         </td>
                     </tr>
                 </table>
@@ -754,48 +727,204 @@ public function generarPDFFactura(Request $request, $id)
             </body>
             </html>";
 
-            // 5. Generar PDF
             $options = new Options();
             $options->set('isRemoteEnabled', true);
             $options->set('tempDir', sys_get_temp_dir());
             $options->set('chroot', public_path());
-
             $dompdf = new Dompdf($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
-            // 6. Limpieza de Búfer (CRÍTICO)
-            if (ob_get_length() > 0) {
-                ob_end_clean();
-            }
-
+            if (ob_get_length() > 0) ob_end_clean();
             $output = $dompdf->output();
             $fileName = "nc_$correlativo.pdf";
 
-            // 7. Guardar
             try {
-                $directory = storage_path('app/public/facturas');
-                if (!file_exists($directory)) {
-                    mkdir($directory, 0777, true);
-                }
-                $pdfPath = $directory . '/' . $fileName;
+                $dir = storage_path('app/public/facturas');
+                if (!file_exists($dir)) mkdir($dir, 0777, true);
+                $pdfPath = "$dir/$fileName";
                 file_put_contents($pdfPath, $output);
-            } catch (\Exception $eSave) {
-                $pdfPath = sys_get_temp_dir() . '/' . $fileName;
+            } catch (\Exception $e) {
+                $pdfPath = sys_get_temp_dir() . "/$fileName";
                 file_put_contents($pdfPath, $output);
             }
 
-            // 8. Respuesta
-            if ($request->has('view')) {
-                return $dompdf->stream($fileName, ["Attachment" => false]);
+            if ($request->has('view')) return $dompdf->stream($fileName, ["Attachment" => false]);
+
+            if ($email) {
+                // ASUNTO DINÁMICO: "Nota de Crédito"
+                Mail::to($email)->send(new FacturaMail($pdfPath, 'Nota de Crédito - ' . $correlativo));
+                return response()->json(['message' => 'Nota enviada.']);
             }
 
-            return response()->json(['message' => 'Nota generada.']);
+            return response()->file($pdfPath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            ]);
 
         } catch (\Exception $e) {
-            if (ob_get_length() > 0) { ob_end_clean(); }
-            Log::error('Error NotaCredito PDF: ' . $e->getMessage());
+            if (ob_get_length() > 0) ob_end_clean();
+            Log::error('Error NotaCredito: ' . $e->getMessage());
+            return response()->json(['error' => 'Error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    // Agrega esto en FacturacionController.php
+    public function generarPDFNotaVenta(Request $request, $id)
+    {
+        try {
+            $numeroWhatsApp = $request->input('numeroWhatsApp');
+            $email = $request->input('email');
+
+            $factura = Facturacion::with(['paciente', 'detalles.tratamiento', 'detalles.procedimiento'])->find($id);
+
+            if (!$factura) {
+                return response()->json(['error' => 'Nota de venta no encontrada'], 404);
+            }
+
+            $facturadorId = $request->input('facturadorId') ?? ($factura->facturador_id ?? null);
+
+            // Datos Cliente
+            $nombre = "CLIENTE GENERAL";
+            $direccion = "-";
+            $numeroDocumento = $factura->num_doc_iden;
+            
+            if ($factura->t_doc_iden === "6") {
+                $cliente = Cliente::where('ruc', $numeroDocumento)->first();
+                if ($cliente) { $nombre = $cliente->rsocial; $direccion = $cliente->direccion; }
+            } else {
+                $paciente = Paciente::where('numerodoc', $numeroDocumento)->first();
+                if ($paciente) { 
+                    $nombre = $paciente->nombres . ' ' . $paciente->ape_paterno; 
+                    $direccion = $paciente->direccion; 
+                }
+            }
+            if (!empty($factura->razon_social)) $nombre = $factura->razon_social;
+
+            $fechaEmision = Carbon::parse($factura->fecha)->format('d/m/Y');
+            $correlativo = "$factura->serie-$factura->numdoc";
+            $montoLimpio = number_format(floatval($factura->importe), 2, '.', '');
+            $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
+
+            $facturador = Facturador::find($facturadorId) ?? Facturador::first();
+            $emisor = [
+                'ruc' => $facturador->ruc,
+                'razon_social' => $facturador->razon_social,
+                'direccion' => $facturador->direccion,
+                'nombre_comercial' => $facturador->nombre_comercial,
+                'ubigeo_dpto' => $facturador->ubigeo_dpto,
+                'ubigeo_provincia' => $facturador->ubigeo_provincia,
+                'ubigeo_distrito' => $facturador->ubigeo_distrito,
+            ];
+
+            $logoPath = public_path('img/logo.jpg');
+            $base64Logo = file_exists($logoPath) ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath)) : '';
+
+            // QR Simbólico
+            $QR = "{$emisor['ruc']}|NV|$correlativo|0|{$factura->importe}|$fechaEmision|0|$numeroDocumento|";
+            $renderer = new ImageRenderer(new RendererStyle(80), new SvgImageBackEnd());
+            $writer = new Writer($renderer);
+            $qrCodeBase64 = base64_encode($writer->writeString($QR));
+
+            $html = "
+            <html>
+            <head>
+                <meta http-equiv='Content-Type' content='text/html; charset=utf-8'/>
+                <style>
+                    body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; padding: 20px; }
+                    .detalles { border-collapse: collapse; width: 100%; }
+                    .detalles th { border: 1px solid black; padding: 5px; background-color: lightblue; }
+                    .detalles td { border: 1px solid black; padding: 5px; }
+                    .totales { text-align: right; font-weight: bold; }
+                    .logo-cell { width: 70px; text-align: center; vertical-align: middle; }
+                    .info-cell { font-size: 12px; width: 360px; }
+                    .ruc-cell { width: 240px; font-size: 16px; text-align: center !important; vertical-align: top; }
+                </style>
+            </head>
+            <body>
+                <table border='0'>
+                    <tr>
+                        <td class='logo-cell'><img src='$base64Logo' style='max-width: 80px;'></td>
+                        <td class='info-cell'>
+                            <b>{$emisor['nombre_comercial']} <br> {$emisor['razon_social']}</b> <br>
+                            {$emisor['direccion']} <br>
+                            {$emisor['ubigeo_dpto']} - {$emisor['ubigeo_provincia']} - {$emisor['ubigeo_distrito']} <br>
+                            Tel. 969 826 870 | Email: evolutiondentalcenter@gmail.com
+                        </td>
+                        <td class='ruc-cell'>
+                            <table border='1' width='100%'><tr><td style='text-align: center;'>
+                                <b>R.U.C. N° {$emisor['ruc']} <br> NOTA DE VENTA <br> $correlativo</b>
+                            </td></tr></table>
+                        </td>
+                    </tr>
+                </table>
+                <hr>
+                <table style='font-size: 12px;'>
+                    <tr><td width='100'><b>Fecha:</b></td><td width='300'>$fechaEmision</td></tr>
+                    <tr><td><b>Cliente:</b></td><td>$nombre</td></tr>
+                    <tr><td><b>Documento:</b></td><td>$numeroDocumento</td></tr>
+                </table>
+                <br>
+                <table class='detalles'>
+                    <tr><th>Cant.</th><th>Descripción</th><th style='text-align:right;'>Importe</th></tr>";
+            
+            foreach ($factura->detalles as $detalle) {
+                $desc = $detalle->tratamiento->nombre . ' - ' . $detalle->procedimiento->nombre;
+                $imp = number_format($detalle->importe, 2);
+                $html .= "<tr><td>1</td><td>$desc</td><td style='text-align:right;'>S/. $imp</td></tr>";
+            }
+
+            $html .= "</table>
+                <br>
+                <table width='100%'>
+                    <tr>
+                        <td width='70%'>
+                            Son: <b>$montoLiteral</b><br>
+                            <img src='data:image/svg+xml;base64,$qrCodeBase64'><br>
+                            (Documento Interno - Sin Valor Fiscal)
+                        </td>
+                        <td>
+                            <table width='100%'>
+                                <tr><td class='totales'>Total:</td><td style='text-align:right;'>S/. ".number_format($factura->importe, 2)."</td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>";
+
+            $options = new Options();
+            $options->set('isRemoteEnabled', true);
+            $options->set('tempDir', sys_get_temp_dir());
+            $options->set('chroot', public_path());
+            $dompdf = new Dompdf($options);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+
+            if (ob_get_length() > 0) ob_end_clean();
+
+            $fileName = "nv_$correlativo.pdf";
+            if ($request->has('view')) return $dompdf->stream($fileName, ["Attachment" => false]);
+            
+            $pdfPath = sys_get_temp_dir() . '/' . $fileName;
+            file_put_contents($pdfPath, $dompdf->output());
+
+            if ($email) {
+                 // ASUNTO DINÁMICO: "Nota de Venta"
+                 Mail::to($email)->send(new FacturaMail($pdfPath, 'Nota de Venta - ' . $correlativo));
+                 return response()->json(['message' => 'Nota de venta enviada.']);
+            }
+
+            return response()->file($pdfPath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            ]);
+
+        } catch (\Exception $e) {
+            if (ob_get_length() > 0) ob_end_clean();
+            Log::error('Error PDF Nota Venta: ' . $e->getMessage());
             return response()->json(['error' => 'Error: ' . $e->getMessage()], 500);
         }
     }

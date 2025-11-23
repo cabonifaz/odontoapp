@@ -1,4 +1,13 @@
-<p>Estimado paciente,</p>
-<p>Adjunto encontrarás tu comprobante de pago.</p>
-<p>Saludos cordiales,</p>
-<p>Consultorios del norte</p>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ $asunto }}</title>
+</head>
+<body>
+    <p>Estimado paciente,</p>
+    <p>Adjunto encontrarás tu documento: <strong>{{ $asunto }}</strong>.</p>
+    <br>
+    <p>Saludos cordiales,</p>
+    <p><strong>VITALDENTIS</strong></p>
+</body>
+</html>

@@ -15,7 +15,6 @@
 @section('content')
 <div class="card">
     <div class="card-body">
-         <!-- Filtro de Fechas -->
          <form id="filtro-form" class="mb-3" method="GET" action="{{ route('facturacion.bandejasunat') }}">
             <div class="row">
                 <div class="col-md-4">
@@ -68,7 +67,6 @@
         </form>
 
         <div class="table-responsive">
-            <!-- Tabla de Resultados -->
             <table id="boletosTable" class="table table-striped">
                 <thead>
                     <tr>
@@ -92,8 +90,10 @@
                            
                             // Determinar si es una fila anulada (Nota de Crédito o Comunicación de Baja)
                             $filaAnulada = $esNotaCredito || ($facturacion->baja == 1);
+                            // Tipo de documento real
+                            $tipoDocumentoReal = $esNotaCredito ? $facturacion->nota_credito->tipodoc : $facturacion->tipodoc;
                         @endphp
-                        <tr class="{{ $filaAnulada ? 'anulado' : '' }}">
+                        <tr class="{{ $filaAnulada ? 'anulado' : '' }}" data-tipodoc="{{ $tipoDocumentoReal }}">
                             <td>{{ $index + 1 }}</td>
                             <td>{{ \Carbon\Carbon::parse($esNotaCredito ? $facturacion->nota_credito->fecha : $facturacion->fecha)->format('d/m/Y H:i:s') }}</td>
                             <td>{{ $esNotaCredito ? $facturacion->nota_credito->serie . '-' . $facturacion->nota_credito->numdoc : $facturacion->serie . '-' . $facturacion->numdoc }}</td>
@@ -130,8 +130,17 @@
                             </td>
                             <td class="text-center">
                                 @if (!$esNotaCredito)
-                                    <!-- Acciones para facturaciones -->
-                                    @if ($facturacion->estado_sunat == 0)
+                                    @if ($facturacion->tipodoc == '04')
+                                        <div class="btn-group">
+                                            <button class="btn btn-secondary btn-sm custom-button ml-2" 
+                                                    data-toggle="tooltip" 
+                                                    title="Generar Nota de Venta" 
+                                                    onclick="mostrarMenuContextual({{ $facturacion->id }}, {{ $facturacion->facturador_id }}, '{{ $facturacion->email }}', '04')">
+                                                <img src="/img/pdf.png" alt="PDF" style="width: 20px; height: 20px;">
+                                            </button>
+                                        </div>
+
+                                    @elseif ($facturacion->estado_sunat == 0)
                                         <div class="btn-group">
                                             <button class="btn btn-warning btn-sm btn-enviar custom-button" data-id="{{ $facturacion->id }}">
                                                 <img src="/img/sunat.png" alt="XML" style="width: 20px; height: 20px;">
@@ -158,21 +167,18 @@
                                                     <i class="fas fa-file-invoice"></i>
                                                 </button>
                                             @endif
-                                           <!-- Botón para abrir el mensaje con las opciones -->
-                                            <button class="btn btn-info btn-sm custom-button ml-2" data-toggle="tooltip" title="Generar PDF" onclick="mostrarMenuContextual({{ $facturacion->id }}, {{ $facturacion->facturador_id }}, '{{ $facturacion->email }}')">
+                                           <button class="btn btn-info btn-sm custom-button ml-2" data-toggle="tooltip" title="Generar PDF" onclick="mostrarMenuContextual({{ $facturacion->id }}, {{ $facturacion->facturador_id }}, '{{ $facturacion->email }}', '{{ $facturacion->tipodoc }}')">
                                                 <img src="/img/pdf.png" alt="PDF" style="width: 20px; height: 20px;">
                                             </button>
                                         </div>
                                     @else
                                         <div class="btn-group">
-                                            <!-- Botón para abrir el mensaje con las opciones -->
-                                            <button class="btn btn-info btn-sm custom-button ml-2" data-toggle="tooltip" title="Generar PDF" onclick="mostrarMenuContextual({{ $facturacion->id }}, {{ $facturacion->facturador_id }}, '{{ $facturacion->email }}')">
+                                            <button class="btn btn-info btn-sm custom-button ml-2" data-toggle="tooltip" title="Generar PDF" onclick="mostrarMenuContextual({{ $facturacion->id }}, {{ $facturacion->facturador_id }}, '{{ $facturacion->email }}', '{{ $facturacion->tipodoc }}')">
                                                 <img src="/img/pdf.png" alt="PDF" style="width: 20px; height: 20px;">
                                             </button>
                                         </div>
                                     @endif
                                 @else
-                                    <!-- Acciones para notas de crédito -->
                                     <button class="btn btn-info btn-sm custom-button" data-toggle="tooltip" title="Generar PDF" onclick="mostrarMenuNotaCredito({{ $facturacion->nota_credito->id }}, {{ $facturacion->nota_credito->facturador_id }}, '{{ $facturacion->email }}')">
                                         <img src="/img/pdf.png" alt="PDF" style="width: 20px; height: 20px;">
                                     </button>
@@ -180,7 +186,9 @@
                             </td>
                             <td class="text-center">
                                 @if (!$esNotaCredito)
-                                    @if ($facturacion->estado_sunat == 0)
+                                    @if ($facturacion->tipodoc == '04')
+                                        <span class="badge badge-secondary">Interno</span>
+                                    @elseif ($facturacion->estado_sunat == 0)
                                         <button class="btn btn-warning btn-sm custom-button" data-toggle="tooltip" title="Pendiente de Envío">
                                             <i class="fa fa-clock"></i>
                                         </button>
@@ -208,7 +216,7 @@
                                 @endif    
                             </td>
                             <td class="text-center">
-                                @if ($facturacion->estado_sunat == 1)
+                                @if ($facturacion->estado_sunat == 1 && $facturacion->tipodoc != '04')
                                     <button class="btn btn-primary btn-sm custom-button" data-toggle="tooltip" title="Descargar XML"
                                         onclick="downloadXML(rucSeleccionado, '{{ $esNotaCredito ? $facturacion->nota_credito->tipodoc : $facturacion->tipodoc }}', '{{ $esNotaCredito ? $facturacion->nota_credito->serie : $facturacion->serie }}', '{{ $esNotaCredito ? $facturacion->nota_credito->numdoc : $facturacion->numdoc }}')">
                                         <img src="/img/xml.png" alt="XML" style="width: 20px; height: 20px;">
@@ -216,7 +224,7 @@
                                 @endif
                             </td>
                             <td class="text-center">
-                                @if ($facturacion->estado_sunat == 1)
+                                @if ($facturacion->estado_sunat == 1 && $facturacion->tipodoc != '04')
                                     <button class="btn btn-secondary btn-sm custom-button" data-toggle="tooltip" title="Descargar CDR" onclick="downloadCDR(rucSeleccionado, '{{ $esNotaCredito ? $facturacion->nota_credito->tipodoc : $facturacion->tipodoc }}', '{{ $esNotaCredito ? $facturacion->nota_credito->serie : $facturacion->serie }}', '{{ $esNotaCredito ? $facturacion->nota_credito->numdoc : $facturacion->numdoc }}')">
                                         <img src="/img/cdr.png" alt="CDR" style="width: 20px; height: 20px;">
                                     </button>
@@ -230,7 +238,6 @@
     </div>
 </div>
 
-<!-- Modal para Nota de Crédito -->
 <div class="modal fade" id="modalNotaCredito" tabindex="-1" role="dialog" aria-labelledby="modalNotaCreditoLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -256,9 +263,7 @@
                         <label for="razonSocial">Nombre/Razón Social</label>
                         <input type="text" class="form-control" id="razonSocial" readonly>
                     </div>
-                    <input type="hidden" id="rucDni"> <!-- RUC/DNI oculto -->
-                    <input type="hidden" id="facturacion_id"> <!-- facturacion_id oculto -->
-                    <div class="form-group row">
+                    <input type="hidden" id="rucDni"> <input type="hidden" id="facturacion_id"> <div class="form-group row">
                         <div class="col">
                             <label for="serieCorrelativo">Nro de Comprobante Rel.</label>
                             <input type="text" class="form-control" id="serieCorrelativo" readonly>
@@ -277,8 +282,7 @@
                             <label for="motivo">Motivo</label>
                             <select class="form-control" id="motivo" style="font-size:14px;">
                                 <option value="Anulación">Anulación</option>
-                                <!-- Agrega otros motivos si es necesario -->
-                            </select>
+                                </select>
                         </div>
                     </div>
                     <button type="button" class="btn btn-primary" onclick="crearNotaCredito()">Generar y Enviar Nota</button>
@@ -289,7 +293,6 @@
     </div>
 </div>
 
-<!-- Modal para enviar WhatsApp -->
 <div class="modal fade" id="modalWhatsApp" tabindex="-1" role="dialog" aria-labelledby="modalWhatsAppLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -304,9 +307,9 @@
                     <div class="form-group">
                         <label for="numeroWhatsApp">Número de WhatsApp</label>
                         <input type="text" class="form-control" id="numeroWhatsApp" maxlength="9" placeholder="Opción no disponible" readonly>
-                        <input type="hidden" class="form-control" id="factura_id">
-                        <input type="hidden" class="form-control" id="facturador_id">
-                    </div>
+                        
+                        <input type="hidden" id="factura_id">
+                        <input type="hidden" id="facturador_modal_id"> <input type="hidden" id="tipodoc_modal">       </div>
                     <div class="form-group">
                         <label for="email">Correo Electrónico</label>
                         <input type="email" class="form-control" id="email" placeholder="Ingrese correo electrónico">
@@ -320,7 +323,6 @@
         </div>
     </div>
 </div>
-<!-- Modal para enviar WhatsApp Nota -->
 <div class="modal fade" id="modalWhatsAppNota" tabindex="-1" role="dialog" aria-labelledby="modalWhatsAppLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -351,7 +353,6 @@
         </div>
     </div>
 </div>
-<!-- Modal Actualizar medio de pago -->
 <div class="modal fade" id="modalMedioPago" tabindex="-1" role="dialog" aria-labelledby="modalMedioPagoLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -364,8 +365,7 @@
             <div class="modal-body">
                 <form id="formMedioPago">
                     <div class="form-group">
-                        <label id="numeroDocumentoLabel"></label> <!-- Etiqueta para el número de documento -->
-                    </div>
+                        <label id="numeroDocumentoLabel"></label> </div>
                     <div class="form-group row">
                         <label for="medioPagoSelect" class="col-form-label col-sm-4">Medio de Pago</label>
                         <div class="col-sm-8">
@@ -457,9 +457,16 @@
         document.body.removeChild(link);
     }
 
-    function generarPDF(id, facturadorId) {
-        // URL para la ruta del controlador que maneja el PDF
-        const url = `/generar-pdf-factura/${id}`;
+    function generarPDF(id, facturadorId, tipodoc) {
+        let url=''
+        console.log("tipodoc2:", tipodoc);
+        // Si es Nota de Venta (04), cambiar la URL
+        if (tipodoc === '04') {
+            url = `/generar-pdf-notaventa/${id}`;
+        }else{
+            // URL por defecto para Facturas y Boletas
+            url = `/generar-pdf-factura/${id}`;
+        }
 
         // Enviar una solicitud POST para visualizar el PDF
         fetch(url, {
@@ -469,8 +476,8 @@
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
             },
             body: JSON.stringify({ 
-            view: true,
-            facturadorId: facturadorId // Enviar el facturadorId en el cuerpo de la solicitud
+                view: true,
+                facturadorId: facturadorId // Enviar el facturadorId en el cuerpo de la solicitud
             })
         })
         .then(response => response.blob())
@@ -509,13 +516,13 @@
         .catch(error => console.error('Error al generar el PDF:', error));
     }
 
-    function mostrarMenuContextual(id, facturadorId, email) {
-        console.log("ID enviado", id);
-        console.log("Email enviado", email);
-        // Asignar el id al campo factura_id en el modal
+    function mostrarMenuContextual(id, facturadorId, email, tipodoc) {
+        // Llenar los campos del modal con los datos recibidos
         document.getElementById("factura_id").value = id;
-        document.getElementById("facturador_id").value = facturadorId;
+        document.getElementById("facturador_modal_id").value = facturadorId; // ID corregido
         document.getElementById("email").value = email;
+        document.getElementById("tipodoc_modal").value = tipodoc; // ID corregido (Antes no existía)
+        
         Swal.fire({
             title: "Confirmar acción a realizar",
             text: "Seleccione una opción:",
@@ -533,30 +540,40 @@
             }
         }).then((result) => {
             if (result.isConfirmed) {
-                const facturadorId = document.querySelector('#facturador_id').value; // Obtener facturadorId aquí
-                generarPDF(id, facturadorId); // Pasar facturadorId a la función
+                // Ver PDF: Usamos los parámetros directos
+                generarPDF(id, facturadorId, tipodoc);
             } else if (result.isDenied) {
+                // Enviar PDF: Abrimos el modal (que ya tiene los datos cargados)
                 $('#modalWhatsApp').modal('show');
-            } else {
-                Swal.fire("Acción cancelada.");
             }
         });
     }
 
-    function enviarPDF(id) { 
+function enviarPDF(id) { 
         const numeroWhatsApp = document.getElementById("numeroWhatsApp").value.trim();
         const email = document.getElementById("email").value.trim();
-        const facturadorId = document.getElementById("facturador_id").value.trim();
-        // Console log para ver el id que se está enviando
-        console.log("ID enviado:", id);
+        
+        // Leer del campo oculto correcto (el del modal, no el del filtro)
+        const facturadorId = document.getElementById("facturador_modal_id").value.trim();
+        
+        // Leer el tipo de documento
+        const tipodocInput = document.getElementById("tipodoc_modal");
+        const tipodoc = tipodocInput ? tipodocInput.value : ''; // Validación extra
+
+        console.log("Enviando PDF - ID:", id, "Tipo:", tipodoc);
+
         const esNumeroWhatsAppValido = /^[0-9]{9}$/.test(numeroWhatsApp);
         const esEmailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
         if (esNumeroWhatsAppValido || esEmailValido) {
-            //console.log("numeroWhatsApp", numeroWhatsApp);
-            //console.log("email", email);
+            
+            // Determinar la URL correcta
+            let url = `/generar-pdf-factura/${id}`;
+            if (tipodoc === '04') {
+                url = `/generar-pdf-notaventa/${id}`;
+            }
 
-            fetch(`/generar-pdf-factura/${id}`, {
+            fetch(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -566,10 +583,12 @@
             })
             .then(response => response.json())
             .then(data => {
+                if(data.error) throw new Error(data.error);
+                
                 Swal.fire("Éxito", data.message, "success");
-                $('#modalWhatsApp').modal('hide');  // Aquí se cierra el modal
+                $('#modalWhatsApp').modal('hide');
             })
-            .catch(error => Swal.fire("Error", "No se pudo enviar la factura.", "error"));
+            .catch(error => Swal.fire("Error", "No se pudo enviar el documento: " + error.message, "error"));
         } else {
             Swal.fire("Error", "Ingrese un número de WhatsApp válido (9 dígitos) o un correo electrónico válido.", "error");
         }
@@ -658,6 +677,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const facturadorId = document.querySelector('#facturador_id').value
         console.log("facturadorId", facturadorId);
         tablaBoletos.querySelectorAll('tr').forEach(row => {
+            // 2. VALIDACIÓN DE EXCLUSIÓN DE TIPO 04
+            const tipoDoc = row.getAttribute('data-tipodoc');
+            if (tipoDoc === '04') return; 
+
             const estadoSunat = row.querySelector('td.text-center .btn-warning');
             const boletoId = row.querySelector('.btn-enviar')?.getAttribute('data-id');
 

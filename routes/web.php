@@ -198,6 +198,9 @@ Route::get('/studentsmentor', [MentorController::class, 'index'])->name('certifi
 Route::post('/generar-certificados', [ApiController::class, 'generarCertificados'])->name('generarCertificados');
 Route::post('/generar-certificadosmentor', [MentorController::class, 'generarCertificados'])->name('generarCertificadosMentor');
 
+// En routes/web.php
+Route::post('/generar-pdf-notaventa/{id}', [FacturacionController::class, 'generarPDFNotaVenta'])->name('generar.pdf.notaventa');
+
 });
 
 // Archivo de autenticación
