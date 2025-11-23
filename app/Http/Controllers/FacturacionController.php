@@ -406,16 +406,17 @@ public function generarPDFFactura(Request $request, $id)
             $numeroWhatsApp = $request->input('numeroWhatsApp');
             $email = $request->input('email');
 
-            // 1. Cargar Factura
+            // 1. Cargar Factura con relaciones
             $factura = Facturacion::with(['paciente', 'detalles.tratamiento', 'detalles.procedimiento'])->find($id);
 
             if (!$factura) {
                 return response()->json(['error' => 'Factura no encontrada'], 404);
             }
 
+            // Priorizar el facturador enviado, si no, usar el de la factura
             $facturadorId = $request->input('facturadorId') ?? ($factura->facturador_id ?? null);
 
-            // 2. Lógica de Cliente / Paciente (Restaurada de tu archivo original)
+            // 2. Lógica de Cliente / Paciente
             $nombre = '';
             $direccion = '';
             $tipoDocIdent = $factura->t_doc_iden;
@@ -428,7 +429,6 @@ public function generarPDFFactura(Request $request, $id)
                         $nombre = strtoupper($cliente->rsocial);
                         $direccion = strtoupper($cliente->direccion);
                     } else {
-                        // Fallback si no está en tabla clientes pero tiene RUC
                         $nombre = "CLIENTE RUC " . $factura->num_doc_iden; 
                     }
                 }
@@ -437,7 +437,6 @@ public function generarPDFFactura(Request $request, $id)
                     $nombre = strtoupper($factura->paciente->nombres . ' ' . $factura->paciente->ape_paterno . ' ' . $factura->paciente->ape_materno);
                     $direccion = strtoupper($factura->paciente->direccion);
                 } else {
-                    // Búsqueda manual como respaldo
                     $paciente = Paciente::where('tipodocumento', $factura->t_doc_iden)
                                         ->where('numerodoc', $factura->num_doc_iden)->first();
                     if ($paciente) {
@@ -455,29 +454,26 @@ public function generarPDFFactura(Request $request, $id)
 
             // 3. Preparar datos del PDF
             $fechaEmision = Carbon::parse($factura->fecha)->format('d/m/Y');
-            $usuario = Auth::user()->name ?? 'Sistema';
             $correlativo = "$factura->serie-$factura->numdoc";
             
             $montoLimpio = number_format(floatval($factura->importe), 2, '.', '');
             $montoLiteral = NumeroALetras::convertirMoneda($montoLimpio);
 
             $tipodoc = (strlen($numeroDocumento) == 11) ? 6 : $tipoDocIdent;
-            $labelTD = match($tipodoc) { '1' => 'DNI', '4' => 'CEX', '6' => 'RUC', '7' => 'PAS', default => 'DOC' };
+            $labelTD = match((string)$tipodoc) { '1' => 'DNI', '4' => 'CEX', '6' => 'RUC', '7' => 'PAS', default => 'DOC' };
             
             $tipoDocumento = ($factura->tipodoc == '01') ? 'Factura Electrónica' : 'Boleta de Venta Electrónica';
             $hash_code = $factura->hash_cpe;
 
-            // Facturador / Emisor
+            // Obtener Facturador
             $facturador = Facturador::find($facturadorId);
-            if (!$facturador) {
-                // Fallback al primer facturador si no se encuentra
-                $facturador = Facturador::first();
-            }
-            
+            // Fallback si no existe
+            if (!$facturador) $facturador = Facturador::first();
+
             $emisor = [
                 'ruc' => $facturador->ruc ?? '00000000000',
-                'razon_social' => $facturador->razon_social ?? 'EMPRESA DEMO',
-                'direccion' => $facturador->direccion ?? 'DIRECCION DEMO',
+                'razon_social' => $facturador->razon_social ?? 'EMPRESA POR DEFECTO',
+                'direccion' => $facturador->direccion ?? 'DIRECCION POR DEFECTO',
                 'nombre_comercial' => $facturador->nombre_comercial ?? '',
                 'ubigeo_dpto' => $facturador->ubigeo_dpto ?? '',
                 'ubigeo_provincia' => $facturador->ubigeo_provincia ?? '',
@@ -485,27 +481,26 @@ public function generarPDFFactura(Request $request, $id)
             ];
 
             // Generar QR
-            $rucEmisor = $emisor['ruc'];
-            $QR = "$rucEmisor|$factura->tipodoc|$correlativo|$factura->igv|$factura->importe|$fechaEmision|$tipodoc|$numeroDocumento|$hash_code";
-            
+            $QR = "{$emisor['ruc']}|$factura->tipodoc|$correlativo|$factura->igv|$factura->importe|$fechaEmision|$tipodoc|$numeroDocumento|$hash_code";
             $renderer = new ImageRenderer(new RendererStyle(80), new SvgImageBackEnd());
             $writer = new Writer($renderer);
             $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
             // Logo
-            $logoPath = public_path('img/logo.jpg');
+            $logoPath = public_path('img/logo.png');
             $base64Logo = '';
             if (file_exists($logoPath)) {
                 $logoData = file_get_contents($logoPath);
                 $base64Logo = 'data:image/png;base64,' . base64_encode($logoData);
             }
 
-            // 4. Construir HTML (Versión abreviada segura)
+            // 4. Construir HTML
             $html = "
             <html>
             <head>
+                <meta http-equiv='Content-Type' content='text/html; charset=utf-8'/>
                 <style>
-                    body { font-family: Arial, sans-serif; font-size: 10px; padding: 20px; }
+                    body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; padding: 20px; }
                     .detalles { border-collapse: collapse; width: 100%; }
                     .detalles th { border: 1px solid black; padding: 5px; background-color: lightblue; }
                     .detalles td { border: 1px solid black; padding: 5px; }
@@ -569,35 +564,35 @@ public function generarPDFFactura(Request $request, $id)
             </body>
             </html>";
 
-            // 5. Generar PDF con DOMPDF (Aquí ocurría el error de variable indefinida)
+            // 5. Generar PDF
             $options = new Options();
             $options->set('isRemoteEnabled', true);
             $options->set('isHtml5ParserEnabled', true);
-            $options->set('tempDir', sys_get_temp_dir());
-            $options->set('chroot', public_path());
+            $options->set('tempDir', sys_get_temp_dir()); 
+            $options->set('chroot', public_path()); 
 
-            // ✅ Aquí se define la variable $dompdf
             $dompdf = new Dompdf($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
-            // 6. Limpiar Buffer (Evita error "Failed to load PDF")
-            if (ob_get_length() > 0) { ob_end_clean(); }
+            // 6. Limpieza de Búfer (CRÍTICO)
+            if (ob_get_length() > 0) {
+                ob_end_clean();
+            }
 
             $output = $dompdf->output();
             $fileName = "cpe_$correlativo.pdf";
 
-            // 7. Guardar PDF (Manejo de permisos)
+            // 7. Guardar Archivo
             try {
                 $directory = storage_path('app/public/facturas');
                 if (!file_exists($directory)) {
                     mkdir($directory, 0777, true);
                 }
-                file_put_contents($directory . '/' . $fileName, $output);
                 $pdfPath = $directory . '/' . $fileName;
-            } catch (\Exception $e) {
-                // Fallback a temporal si falla storage
+                file_put_contents($pdfPath, $output);
+            } catch (\Exception $eSave) {
                 $pdfPath = sys_get_temp_dir() . '/' . $fileName;
                 file_put_contents($pdfPath, $output);
             }
@@ -607,16 +602,21 @@ public function generarPDFFactura(Request $request, $id)
                 return $dompdf->stream($fileName, ["Attachment" => false]);
             }
 
-            // Envío por correo/whatsapp (Opcional)
-            if ($email && $pdfPath) {
-                 Mail::to($email)->send(new FacturaMail($pdfPath));
+            if ($numeroWhatsApp || $email) {
+                if ($email) {
+                    Mail::to($email)->send(new FacturaMail($pdfPath));
+                }
+                return response()->json(['message' => 'Factura enviada con éxito.']);
             }
 
-            return response()->json(['message' => 'Factura generada correctamente.']);
+            return response()->file($pdfPath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            ]);
 
         } catch (\Exception $e) {
             if (ob_get_length() > 0) { ob_end_clean(); }
-            Log::error('Error CRITICO generando PDF Factura: ' . $e->getMessage());
+            Log::error('Error CRITICO PDF Factura: ' . $e->getMessage());
             return response()->json(['error' => 'Error del servidor: ' . $e->getMessage()], 500);
         }
     }
@@ -654,7 +654,7 @@ public function generarPDFFactura(Request $request, $id)
                  }
             }
 
-            // Preparar datos
+            // Datos Nota
             $fechaEmision = Carbon::parse($notaCredito->fecha)->format('d/m/Y');
             $correlativo = "$notaCredito->serie-$notaCredito->numdoc";
             $docRef = "$factura->serie-$factura->numdoc";
@@ -665,6 +665,8 @@ public function generarPDFFactura(Request $request, $id)
 
             // Facturador
             $facturador = Facturador::find($facturadorId);
+            if (!$facturador) $facturador = Facturador::first();
+            
             $rucEmisor = $facturador->ruc ?? '00000000000';
             
             // QR
@@ -674,7 +676,7 @@ public function generarPDFFactura(Request $request, $id)
             $qrCodeBase64 = base64_encode($writer->writeString($QR));
 
             // Logo
-            $logoPath = public_path('img/logo.jpg');
+            $logoPath = public_path('img/logo.png');
             $base64Logo = '';
             if (file_exists($logoPath)) {
                 $logoData = file_get_contents($logoPath);
@@ -685,8 +687,9 @@ public function generarPDFFactura(Request $request, $id)
             $html = "
             <html>
             <head>
+                <meta http-equiv='Content-Type' content='text/html; charset=utf-8'/>
                 <style>
-                    body { font-family: Arial, sans-serif; font-size: 10px; padding: 20px; }
+                    body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; padding: 20px; }
                     .totales { text-align: right; font-weight: bold; }
                 </style>
             </head>
@@ -734,25 +737,30 @@ public function generarPDFFactura(Request $request, $id)
             $options->set('tempDir', sys_get_temp_dir());
             $options->set('chroot', public_path());
 
-            // ✅ Definir variable $dompdf
             $dompdf = new Dompdf($options);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
 
-            // 6. Limpiar Buffer
-            if (ob_get_length() > 0) { ob_end_clean(); }
+            // 6. Limpieza de Búfer (CRÍTICO)
+            if (ob_get_length() > 0) {
+                ob_end_clean();
+            }
 
             $output = $dompdf->output();
             $fileName = "nc_$correlativo.pdf";
 
             // 7. Guardar
             try {
-                $dir = storage_path('app/public/facturas');
-                if (!file_exists($dir)) mkdir($dir, 0777, true);
-                file_put_contents("$dir/$fileName", $output);
-            } catch (\Exception $e) {
-                file_put_contents(sys_get_temp_dir() . "/$fileName", $output);
+                $directory = storage_path('app/public/facturas');
+                if (!file_exists($directory)) {
+                    mkdir($directory, 0777, true);
+                }
+                $pdfPath = $directory . '/' . $fileName;
+                file_put_contents($pdfPath, $output);
+            } catch (\Exception $eSave) {
+                $pdfPath = sys_get_temp_dir() . '/' . $fileName;
+                file_put_contents($pdfPath, $output);
             }
 
             // 8. Respuesta
@@ -764,7 +772,7 @@ public function generarPDFFactura(Request $request, $id)
 
         } catch (\Exception $e) {
             if (ob_get_length() > 0) { ob_end_clean(); }
-            Log::error('Error NotaCredito: ' . $e->getMessage());
+            Log::error('Error NotaCredito PDF: ' . $e->getMessage());
             return response()->json(['error' => 'Error: ' . $e->getMessage()], 500);
         }
     }
