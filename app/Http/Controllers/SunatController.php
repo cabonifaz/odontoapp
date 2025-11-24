@@ -151,7 +151,7 @@ class SunatController extends Controller
 
         // Obtener las facturaciones
         $facturaciones = Facturacion::with(['cliente', 'paciente'])
-            ->whereIn('tipodoc', ['01', '03'])
+            ->whereIn('tipodoc', ['01', '03', '04'])
             ->whereDate('fecha', '>=', $fechaInicio)
             ->whereDate('fecha', '<=', $fechaFin)
             ->when($facturadorId, function ($query) use ($facturadorId) {
