@@ -48,7 +48,7 @@
                 {{ $emisor['razon_social'] }}</b> <br>
                 {{ $emisor['direccion'] }}<br>
                 {{ $emisor['ubigeo_dpto'] }} - {{ $emisor['ubigeo_provincia'] }} - {{ $emisor['ubigeo_distrito'] }}<br>
-                Tel. 969 999 999 | Email: consultoriosdelnorte@gmail.com
+                
             </td>
         </tr>
     </table>

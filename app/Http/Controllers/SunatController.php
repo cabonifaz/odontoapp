@@ -355,7 +355,7 @@ class SunatController extends Controller
         ];
 
         // Procesar el logo en base64
-        $logoPath = public_path('img/logo.png');
+        $logoPath = public_path('img/logo.jpg');
         $type = pathinfo($logoPath, PATHINFO_EXTENSION);
         $logoData = file_get_contents($logoPath);
         $base64 = 'data:image/' . $type . ';base64,' . base64_encode($logoData);
