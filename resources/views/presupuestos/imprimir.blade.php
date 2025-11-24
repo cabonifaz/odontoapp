@@ -64,11 +64,7 @@
             <img src="{{ $base64Logo }}" alt="Logo de la Clínica">
         </div>
         <div class="info-cell">
-            <b>CONSULTORIOS DEL NORTE <br>
-                CONSULTORIOS DEL NORTE S.A.C</b>
-            AV. LIMA 987<br>
-            PIURA - PIURA - PIURA<br>
-            Tel. 969 999 999 | Email: consultoriosdelnorte@gmail.com
+                VITALDENTIS S.A.C</b>
         </div>
     </div>
 
