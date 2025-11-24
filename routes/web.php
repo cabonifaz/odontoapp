@@ -86,6 +86,9 @@ Route::post('/citas/buscar', [CitaController::class, 'buscarCitas'])->name('cita
 Route::get('/citas/consulta_por_fecha', [CitaController::class, 'mostrarConsultaPorFecha'])->name('citas.consulta_por_fecha');
 
 Route::get('/citas/{citaId}/actividades', [CitaController::class, 'getActividades']);
+Route::get('/citas/calendario', [CitaController::class, 'calendario'])->name('citas.calendario');
+Route::get('/api/citas-calendario', [CitaController::class, 'listarCitasCalendario'])->name('api.citas.calendario');
+Route::resource('citas', CitaController::class);
 
 Route::get('/citas/{presupuestoId}/detalles-actividades/{tratamientoId}', [CitaController::class, 'verActividades'])->name('citas.detalles_actividades');
 Route::post('/actividades-paciente/{citaId}/cambiar-estado', [CitaController::class, 'cambiarEstado']);

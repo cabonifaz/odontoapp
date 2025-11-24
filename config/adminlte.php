@@ -420,6 +420,12 @@ return [
                 'url' => '/citas/consulta_por_fecha', // URL directa
                 'icon' => 'fas fa-calendar-check', // Ícono específico para reporte de citas
             ],
+            [
+            'text' => 'Calendario de Citas',
+            'url'  => 'citas/calendario',
+            'icon' => 'fas fa-calendar-alt',
+             // 'can'  => 'Ver Citas', // Descomenta si usas permisos
+            ],
         ],
         'classes' => 'nav-item has-treeview',
     ],

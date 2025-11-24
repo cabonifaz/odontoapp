@@ -28,6 +28,11 @@ class Cita extends Model
         'user_id'
     ];
 
+    protected $casts = [
+        'fecha_cita' => 'date:Y-m-d H:i:s', // Asegura que se lea correctamente como fecha y hora
+        // ... otros casts
+    ];
+
     public function medico()
     {
         return $this->belongsTo(Medico::class, 'id_medico');

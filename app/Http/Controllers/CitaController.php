@@ -18,9 +18,89 @@ use App\Models\DetallePresupuesto;
 
 class CitaController extends Controller
 {
+    
+    public function calendario()
+    {
+        $medicos = \App\Models\Medico::all(); // Para filtros si deseas agregarlos luego
+        return view('citas.calendario', compact('medicos'));
+    }
+    
     /**
-     * Display a listing of the resource.
+     * Devuelve las citas en formato JSON para FullCalendar.
      */
+public function listarCitasCalendario(Request $request)
+    {
+        // Recibir filtros
+        $medicoId = $request->input('medico_id');
+        $start = $request->input('start');
+        $end = $request->input('end');
+
+        // Usar Eloquent con relaciones para cargar paciente y medico
+        $query = \App\Models\Cita::with(['paciente', 'medico']) // Carga relaciones
+            ->where('estado', '!=', 2); // Asumiendo 2 = Anulado
+
+        // 1. Filtro por Médico (usando la columna correcta de tu tabla citas)
+        if ($medicoId) {
+            $query->where('id_medico', $medicoId);
+        }
+        
+        // 2. Filtro de Fechas
+        if ($start && $end) {
+            $fechaInicio = Carbon::parse($start)->startOfDay();
+            $fechaFin = Carbon::parse($end)->endOfDay();
+            
+            $query->whereBetween('fecha_cita', [$fechaInicio, $fechaFin]);
+        }
+
+        $citas = $query->get();
+
+        // 3. Formatear para FullCalendar
+        $eventos = $citas->map(function ($cita) {
+            $fechaBase = Carbon::parse($cita->fecha_cita)->format('Y-m-d');
+            
+            $horaInicio = $cita->hora_inicio ?? '00:00:00';
+            $startDT = Carbon::parse("$fechaBase $horaInicio");
+            
+            if (!empty($cita->hora_fin) && $cita->hora_fin != '00:00:00') {
+                $endDT = Carbon::parse("$fechaBase $cita->hora_fin");
+            } else {
+                $endDT = $startDT->copy()->addMinutes(30);
+            }
+
+            // Colores
+            $color = '#ffc107'; // Pendiente
+            if ($cita->estado == 1) $color = '#28a745'; // Atendido
+            if ($cita->estado == 2) $color = '#dc3545'; // Anulado
+
+            // Obtener Nombre Completo del Paciente desde la relación
+            $nombrePaciente = 'Paciente Desconocido';
+            if ($cita->paciente) {
+                $nombrePaciente = trim($cita->paciente->nombres . ' ' . $cita->paciente->ape_paterno . ' ' . ($cita->paciente->ape_materno ?? ''));
+            }
+            
+            // Obtener Nombre del Médico
+            $nombreMedico = $cita->medico ? $cita->medico->nombre_medico : 'Sin Médico';
+
+            return [
+                'id' => $cita->id,
+                'title' => "$nombrePaciente", 
+                'start' => $startDT->toIso8601String(),
+                'end' => $endDT->toIso8601String(),
+                'backgroundColor' => $color,
+                'borderColor' => $color,
+                'textColor' => '#fff',
+                'extendedProps' => [
+                    'medico' => $nombreMedico,
+                    'estado' => $cita->estado,
+                    'paciente' => $nombrePaciente
+                ]
+            ];
+        });
+
+        return response()->json($eventos);
+    }
+
+
     public function index(Request $request)
 {
     // Obtener el ID de la empresa del usuario autenticado
