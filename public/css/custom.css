@@ -1,25 +1,127 @@
-/* Estilo para el menú principal */
-.nav-item > a {
-    display: flex;
-    align-items: center;
-    padding-left: 10px; /* Ajusta el valor según sea necesario */
+/* =========================================
+   DISEÑO DE MENÚ - PALETA CORPORATIVA
+   ========================================= */
+
+/* Definición de Variables (Tus Colores) */
+:root {
+    --brand-bg-light: #F3F3F3;  /* Tu --bs-cyan */
+    --brand-text:     #111111;  /* Tu --bs-black */
+    --brand-white:    #FFFFFF;  /* Tu --bs-white */
+    --brand-icon:     #777777;  /* Tu --bs-gray */
+    --brand-primary:  #0076C6;  /* Tu --bs-gt */
 }
 
-/* Asignar un ancho fijo a los íconos para alinear el texto */
-.nav-item > a i {
-    width: 24px; /* Ajusta el valor según sea necesario */
-    text-align: center; /* Centrar los íconos dentro del espacio asignado */
-    margin-right: 10px; /* Añadir separación entre el ícono y el texto */
+/* 1. ESTRUCTURA PRINCIPAL */
+.main-sidebar {
+    background-color: var(--brand-white) !important;
+    border-right: 1px solid var(--brand-bg-light);
+    /* Sombra sutil pero definida para separar el menú del contenido */
+    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.05) !important;
 }
 
-/* Estilo para los submenús */
-.nav-item .nav-treeview .nav-item > a {
-    display: flex;
-    align-items: center;
-    padding-left: 35px; /* Ajusta el valor según sea necesario */
+/* 2. LOGOTIPO / CABECERA DEL MENÚ */
+.brand-link {
+    background-color: var(--brand-white) !important;
+    border-bottom: 1px solid var(--brand-bg-light) !important;
+    color: var(--brand-text) !important;
 }
 
-/* Separación entre ícono y texto en submenús */
-.nav-item .nav-treeview .nav-item > a i {
-    margin-right: 10px; /* Ajusta el valor según sea necesario */
+.brand-text {
+    color: var(--brand-text) !important;
+    font-weight: 800 !important; /* Letra gruesa para fácil lectura */
+}
+
+/* 3. ITEMS DEL MENÚ (Estado Normal) */
+.nav-sidebar {
+    padding: 10px;
+}
+
+.nav-sidebar .nav-item {
+    margin-bottom: 4px; 
+}
+
+.nav-sidebar .nav-link {
+    /* Tu color Negro #111111 para máximo contraste */
+    color: var(--brand-text) !important; 
+    font-weight: 600; 
+    border-radius: 8px !important;
+    padding: 10px 15px;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Iconos en estado normal (Gris #777777) */
+.nav-sidebar .nav-link i {
+    color: var(--brand-icon) !important;
+    font-size: 1.1rem;
+    margin-right: 10px;
+    width: 25px; /* Alineación perfecta de iconos */
+    text-align: center;
+}
+
+/* 4. ESTADO HOVER (Al pasar el mouse) */
+.nav-sidebar .nav-link:hover {
+    /* Fondo gris claro #F3F3F3 */
+    background-color: var(--brand-bg-light) !important; 
+    /* El texto se vuelve azul marca #0076C6 */
+    color: var(--brand-primary) !important; 
+    transform: translateX(4px); /* Pequeño movimiento */
+}
+
+.nav-sidebar .nav-link:hover i {
+    color: var(--brand-primary) !important;
+}
+
+/* 5. ITEM ACTIVO (Página Actual) */
+.nav-sidebar > .nav-item > .nav-link.active {
+    /* Fondo Azul Marca #0076C6 */
+    background-color: var(--brand-primary) !important; 
+    /* Texto Blanco #FFFFFF */
+    color: var(--brand-white) !important; 
+    /* Sombra azulada para dar profundidad */
+    box-shadow: 0 4px 8px rgba(0, 118, 198, 0.35) !important; 
+}
+
+/* El icono activo pasa a ser blanco */
+.nav-sidebar > .nav-item > .nav-link.active i {
+    color: var(--brand-white) !important;
+}
+
+/* 6. SUBMENÚS (Niveles Hijos) */
+.nav-treeview {
+    /* Fondo gris muy suave para encapsular las opciones hijas */
+    background-color: #fafafa; 
+    margin-left: 10px;
+    border-radius: 8px;
+    margin-top: 5px;
+    padding: 5px 0;
+}
+
+.nav-treeview > .nav-item > .nav-link {
+    padding-left: 40px;
+    font-size: 0.95rem; /* Un poco más pequeño que el padre */
+    color: var(--brand-icon) !important; /* Gris por defecto */
+}
+
+.nav-treeview > .nav-item > .nav-link:hover {
+    background-color: var(--brand-bg-light) !important;
+    color: var(--brand-text) !important;
+}
+
+/* Submenú activo (Borde izquierdo azul en vez de fondo completo) */
+.nav-treeview > .nav-item > .nav-link.active {
+    background-color: transparent !important;
+    color: var(--brand-primary) !important;
+    font-weight: 700;
+    box-shadow: none !important;
+    border-left: 4px solid var(--brand-primary);
+    border-radius: 0 !important; /* Cuadrado para pegar el borde */
+}
+
+/* 7. SCROLLBAR PERSONALIZADO */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+    background-color: #cccccc;
+    border-radius: 4px;
 }
