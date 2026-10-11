@@ -16,3 +16,6 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Dumps de base de datos (contienen datos personales; se guardan solo en local)
+*.sql
