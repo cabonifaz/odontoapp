@@ -62,6 +62,8 @@ ENV PORT=${PORT:-8080}
 # Exponer el puerto asignado por Railway
 EXPOSE ${PORT}
 
-# === Comando principal: iniciar Apache usando el puerto dinámico ===
-# (se vuelve a forzar un solo MPM en runtime: en Railway reaparecen los mpm_* borrados en build)
-CMD ["bash", "-c", "rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* && a2enmod -q mpm_prefork && sed -i \"s/Listen .*/Listen ${PORT}/\" /etc/apache2/ports.conf && sed -i \"s/:.*/:${PORT}>/\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
+# === Arranque: volumen persistente (/data), fix de MPM y puerto dinámico ===
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+CMD ["/usr/local/bin/entrypoint.sh"]
