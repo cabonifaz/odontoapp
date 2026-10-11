@@ -21,8 +21,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 # === Instalar Composer desde la imagen oficial ===
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# === Habilitar mod_rewrite de Apache ===
-RUN a2enmod rewrite
+# === Dejar un solo MPM (prefork, requerido por mod_php) y habilitar mod_rewrite ===
+RUN rm -f /etc/apache2/mods-enabled/mpm_*.load /etc/apache2/mods-enabled/mpm_*.conf \
+    && a2enmod mpm_prefork rewrite
 
 # === Configurar Apache para Laravel ===
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
@@ -62,4 +63,5 @@ ENV PORT=${PORT:-8080}
 EXPOSE ${PORT}
 
 # === Comando principal: iniciar Apache usando el puerto dinámico ===
-CMD ["bash", "-c", "sed -i \"s/Listen .*/Listen ${PORT}/\" /etc/apache2/ports.conf && sed -i \"s/:.*/:${PORT}>/\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
+# (se vuelve a forzar un solo MPM en runtime: en Railway reaparecen los mpm_* borrados en build)
+CMD ["bash", "-c", "rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* && a2enmod -q mpm_prefork && sed -i \"s/Listen .*/Listen ${PORT}/\" /etc/apache2/ports.conf && sed -i \"s/:.*/:${PORT}>/\" /etc/apache2/sites-available/000-default.conf && apache2-foreground"]
