@@ -1,3 +1,8 @@
+# Nunca servir certificados ni claves privadas
+<FilesMatch "\.(pfx|p12|key)$">
+    Require all denied
+</FilesMatch>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

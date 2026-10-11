@@ -49,11 +49,12 @@ class SunatService
             throw new Exception('Facturador no encontrado.');
         }
 
-        // Validar que el archivo del certificado realmente exista en el contenedor
-        $rutaCertificado = public_path($facturador->ruta_certificado);
-        
+        // Los certificados viven fuera de public/ (en Railway, dentro del volumen persistente).
+        // De ruta_certificado solo se usa el nombre del archivo.
+        $rutaCertificado = rtrim(config('services.sunat.cert_dir'), '/') . '/' . basename($facturador->ruta_certificado);
+
         if (!file_exists($rutaCertificado)) {
-             throw new Exception("El archivo de certificado digital (.pfx/.pem) no se encuentra en la ruta: " . $rutaCertificado . ". Verifica que se haya subido al repositorio.");
+             throw new Exception("El archivo de certificado digital (.pfx/.pem) no se encuentra en la ruta: " . $rutaCertificado . ". Súbelo a la carpeta de certificados (SUNAT_CERT_DIR).");
         }
 
         $this->certificado = $rutaCertificado;

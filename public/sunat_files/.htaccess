@@ -1,0 +1,5 @@
+# Solo los XML/CDR (xml/, cdr/) se sirven por web. El código de firma y los
+# certificados se usan desde PHP, nunca por HTTP.
+<FilesMatch "\.(php|pem|pfx|p12|key)$">
+    Require all denied
+</FilesMatch>

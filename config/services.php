@@ -31,4 +31,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'sunat' => [
+        // Carpeta privada (fuera de public/) con los certificados .pfx/.p12 de los facturadores.
+        'cert_dir' => env('SUNAT_CERT_DIR', storage_path('app/sunat_certs')),
+    ],
+
 ];

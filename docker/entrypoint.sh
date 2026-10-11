@@ -33,6 +33,19 @@ if [ -d "$DATA_DIR" ]; then
         ln -sfn "$dst" "$src"
     done
     mkdir -p "$DATA_DIR/storage/app/public"
+
+    # Certificados SUNAT: si la imagen aún trae .pfx/.p12 en public/, se mueven a la carpeta
+    # privada del volumen (sin pisar los existentes) y se eliminan de public/.
+    CERT_DIR="$DATA_DIR/storage/app/sunat_certs"
+    mkdir -p "$CERT_DIR"
+    shopt -s nullglob nocaseglob
+    for cert in "$APP_DIR"/public/sunat_files/*.pfx "$APP_DIR"/public/sunat_files/*.p12; do
+        cp -n "$cert" "$CERT_DIR/"
+        rm -f "$cert"
+    done
+    shopt -u nullglob nocaseglob
+    chmod 700 "$CERT_DIR"
+
     chown -R www-data:www-data "$DATA_DIR"
     echo "[entrypoint] Almacenamiento persistente montado en $DATA_DIR"
 else
