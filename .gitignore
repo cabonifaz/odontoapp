@@ -19,3 +19,7 @@ yarn-error.log
 
 # Dumps de base de datos (contienen datos personales; se guardan solo en local)
 *.sql
+
+# Certificados digitales: nunca en el repo (van en storage/app/sunat_certs / volumen)
+*.pfx
+*.p12

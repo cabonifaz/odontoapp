@@ -45,6 +45,7 @@ if [ -d "$DATA_DIR" ]; then
     done
     shopt -u nullglob nocaseglob
     chmod 700 "$CERT_DIR"
+    echo "[entrypoint] Certificados SUNAT en $CERT_DIR: $(ls -1 "$CERT_DIR" | wc -l) ($(ls -1 "$CERT_DIR" | tr '\n' ' '))"
 
     chown -R www-data:www-data "$DATA_DIR"
     echo "[entrypoint] Almacenamiento persistente montado en $DATA_DIR"
